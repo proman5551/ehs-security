@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0A0E13" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>SAFEOPS · 인스파이어 리조트 안전관제</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body, #root { height: 100%; margin: 0; padding: 0; background: #0A0E13; }
+  body { -webkit-font-smoothing: antialiased; overscroll-behavior: none; }
+  #loading {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: #0A0E13; color: #7D8896;
+    font-family: -apple-system, 'Segoe UI', 'Noto Sans KR', sans-serif;
+  }
+  #loading .logo { font-size: 20px; font-weight: 700; letter-spacing: .04em; font-family: ui-monospace, monospace; }
+  #loading .logo b { color: #FFB224; }
+  #loading .bar { width: 160px; height: 3px; border-radius: 2px; background: #1E2836; overflow: hidden; }
+  #loading .bar i { display: block; width: 40%; height: 100%; background: #FFB224; animation: slide 1s ease-in-out infinite; }
+  @keyframes slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(300%)} }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "recharts": "https://esm.sh/recharts@2.12.7?deps=react@18.2.0,react-dom@18.2.0&external=react,react-dom",
+    "lucide-react": "https://esm.sh/lucide-react@0.383.0?deps=react@18.2.0&external=react"
+  }
+}
+</script>
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+</head>
+<body>
+<div id="root"></div>
+<div id="loading"><div class="logo">SAFE<b>OPS</b></div><div class="bar"><i></i></div><div>로딩 중…</div></div>
+<script type="text/babel" data-type="module" data-presets="react">
+import { createRoot } from "react-dom/client";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Cell,
+} from "recharts";
+import {
+  LayoutDashboard, FileCheck2, BellRing, Grid3X3, Thermometer,
+  MapPin, PenLine, Bot, Send, X, CircleAlert, CircleCheck,
+  Clock, Link2, MessageSquareText, Radio, FilePlus2, ClipboardCheck,
+} from "lucide-react";
+
+/* ───────────────────── 디자인 토큰 ───────────────────── */
+const T = {
+  bg: "#0A0E13",
+  panel: "#111721",
+  panel2: "#0E141D",
+  line: "#1E2836",
+  text: "#E6EDF5",
+  muted: "#7D8896",
+  amber: "#FFB224",
+  red: "#F2555A",
+  green: "#46C68F",
+  cyan: "#53C7E8",
+  mono: "'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace",
+};
+
+/* ───────────────────── 반응형 훅 ───────────────────── */
+function useIsMobile() {
+  const [mobile, setMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
+  useEffect(() => {
+    const onResize = () => setMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return mobile;
+}
+
+/* ───────────────────── 샘플 데이터 ───────────────────── */
+const SITES = [
+  { id: "ARN", name: "Arena", manager: "김현수", workers: 24, status: "주의", risk: "높음" },
+  { id: "BOH", name: "BOH (주방·후방구역)", manager: "박지연", workers: 31, status: "경고", risk: "높음" },
+  { id: "CAS", name: "Casino", manager: "이도윤", workers: 42, status: "정상", risk: "중간" },
+  { id: "RTD", name: "Rotunda", manager: "최민아", workers: 18, status: "주의", risk: "중간" },
+  { id: "MALL", name: "Mall·F&B", manager: "정우진", workers: 27, status: "정상", risk: "낮음" },
+];
+
+const INITIAL_PERMITS = [
+  { id: "WP-2607-014", type: "화기작업", site: "Arena", location: "Arena 무대 상부 트러스", start: "07-07 08:00", end: "07-07 17:00", status: "진행중", signed: true,
+    worker: "강태호", contact: "010-3421-8876",
+    workers: [{ name: "강태호", contact: "010-3421-8876", signed: true }, { name: "김민재", contact: "010-6631-2087", signed: true }],
+    approvals: { inspireManager: { name: "김현수", sig: null }, inspireStaff: { name: "이안전", sig: null }, contractor: { name: "박시공", sig: null } } },
+  { id: "WP-2607-015", type: "밀폐작업", site: "BOH (주방·후방구역)", location: "BOH 주방 배기덕트 내부", start: "07-07 09:00", end: "07-07 15:00", status: "승인대기", signed: false,
+    worker: "오세라", contact: "010-9982-1123",
+    workers: [{ name: "오세라", contact: "010-9982-1123", signed: false }, { name: "배수진", contact: "010-4470-9915", signed: true }] },
+  { id: "WP-2607-016", type: "고소작업", site: "Rotunda", location: "Rotunda 천장 키네틱 구동부", start: "07-07 10:00", end: "07-07 18:00", status: "승인대기", signed: false,
+    worker: "문준호", contact: "010-5510-4471",
+    workers: [{ name: "문준호", contact: "010-5510-4471", signed: false }, { name: "조현우", contact: "010-8123-5540", signed: false }, { name: "신예린", contact: "010-2290-7761", signed: false }] },
+  { id: "WP-2607-012", type: "일반작업", site: "Casino", location: "Casino 슬롯머신 구역 배선정비", start: "07-06 13:00", end: "07-06 17:00", status: "완료", signed: true,
+    worker: "한지수", contact: "010-7768-2209",
+    workers: [{ name: "한지수", contact: "010-7768-2209", signed: true }] },
+  { id: "WP-2607-013", type: "고소작업", site: "Rotunda", location: "Rotunda 미디어파사드 점검", start: "07-06 08:00", end: "07-07 18:00", status: "진행중", signed: true,
+    worker: "임세빈", contact: "010-2214-9930",
+    workers: [{ name: "임세빈", contact: "010-2214-9930", signed: true }, { name: "황도현", contact: "010-9034-1189", signed: true }] },
+  { id: "WP-2607-011", type: "화기작업", site: "Arena", location: "Arena 백스테이지 용접", start: "07-05 09:00", end: "07-05 12:00", status: "반려", signed: false,
+    worker: "서동혁", contact: "010-8845-6612",
+    workers: [{ name: "서동혁", contact: "010-8845-6612", signed: false }] },
+];
+
+/* 작업자 명단 헬퍼 */
+const permitWorkers = (p) => p.workers || [{ name: p.worker, contact: p.contact, signed: p.signed }];
+const workerLabel = (p) => {
+  const w = permitWorkers(p);
+  return w.length > 1 ? `${w[0].name} 외 ${w.length - 1}` : w[0].name;
+};
+const signCount = (p) => {
+  const w = permitWorkers(p);
+  return { done: w.filter((x) => x.signed).length, total: w.length };
+};
+
+const ALARMS = [
+  { id: "AL-3391", time: "07-07 13:42", site: "BOH (주방·후방구역)", type: "가스농도 초과", level: "긴급", msg: "주방덕트 밀폐작업 중 CO 41ppm — 기준치 초과", ack: false },
+  { id: "AL-3390", time: "07-07 12:18", site: "Arena", type: "화기작업 경보", level: "경고", msg: "무대 상부 화기작업 구역 온도 상승 감지", ack: false },
+  { id: "AL-3389", time: "07-07 11:05", site: "Casino", type: "안전모 미착용", level: "주의", msg: "슬롯 구역 정비 중 안전모 미착용 1건 감지", ack: true },
+  { id: "AL-3388", time: "07-07 09:51", site: "Rotunda", type: "고소작업 위험", level: "경고", msg: "키네틱 구동부 교체 중 안전대 미체결 감지", ack: true },
+  { id: "AL-3387", time: "07-06 16:33", site: "Mall·F&B", type: "지게차 접근", level: "주의", msg: "하역구역 지게차-보행자 근접 경고", ack: true },
+  { id: "AL-3386", time: "07-06 14:07", site: "BOH (주방·후방구역)", type: "가스농도 초과", level: "긴급", msg: "덕트 내부 VOC 순간 피크 감지", ack: true },
+  { id: "AL-3385", time: "07-06 10:22", site: "Arena", type: "온도 이상", level: "주의", msg: "조명설비 과열 온도 상승 추세", ack: true },
+];
+
+const HEAT_ROWS = ["Arena", "BOH", "Casino", "Rotunda", "Mall·F&B", "주차·외부"];
+const HEAT_COLS = ["화재", "추락", "질식", "감전", "화학물질"];
+const HEAT = [
+  [82, 68, 12, 45, 30],
+  [74, 25, 88, 20, 64],
+  [40, 15, 10, 55, 22],
+  [30, 85, 8, 48, 12],
+  [44, 20, 14, 30, 18],
+  [25, 40, 6, 22, 10],
+];
+
+const ALARM_WEEK = [
+  { day: "화", cnt: 4 }, { day: "수", cnt: 7 }, { day: "목", cnt: 3 },
+  { day: "금", cnt: 9 }, { day: "토", cnt: 2 }, { day: "일", cnt: 1 }, { day: "월", cnt: 6 },
+];
+
+/* ───────────────────── 공용 컴포넌트 ───────────────────── */
+const levelColor = (lv) => (lv === "긴급" ? T.red : lv === "경고" ? T.amber : T.cyan);
+const statusColor = (s) =>
+  s === "진행중" ? T.cyan : s === "승인대기" ? T.amber : s === "완료" ? T.green : T.red;
+
+function Badge({ color, children }) {
+  return (
+    <span style={{
+      fontFamily: T.mono, fontSize: 11, color, border: `1px solid ${color}44`,
+      background: `${color}14`, padding: "2px 8px", borderRadius: 3, whiteSpace: "nowrap",
+    }}>{children}</span>
+  );
+}
+
+function Panel({ title, right, children, style }) {
+  return (
+    <div style={{
+      background: T.panel, border: `1px solid ${T.line}`, borderRadius: 8,
+      display: "flex", flexDirection: "column", minWidth: 0, ...style,
+    }}>
+      {title && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "12px 14px", borderBottom: `1px solid ${T.line}`, gap: 8, flexWrap: "wrap",
+        }}>
+          <span style={{ fontSize: 12, letterSpacing: "0.08em", color: T.muted, fontFamily: T.mono }}>{title}</span>
+          {right}
+        </div>
+      )}
+      <div style={{ padding: 14, flex: 1, minWidth: 0 }}>{children}</div>
+    </div>
+  );
+}
+
+function Kpi({ label, value, sub, color }) {
+  return (
+    <div style={{ background: T.panel, border: `1px solid ${T.line}`, borderRadius: 8, padding: "14px 16px" }}>
+      <div style={{ fontSize: 11, color: T.muted, letterSpacing: "0.08em", fontFamily: T.mono }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 700, color: color || T.text, fontFamily: T.mono, marginTop: 6, lineHeight: 1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 12, color: T.muted, marginTop: 6 }}>{sub}</div>}
+    </div>
+  );
+}
+
+/* ───────────────────── 온열질환(폭염) 단계 판정 ─────────────────────
+   근거: 산업안전보건기준에 관한 규칙 제558~560조 (2025.6.1 시행)
+   체감온도(기온+습도) 기준 단계 — 옥외작업 온열질환 예방 의무
+──────────────────────────────────────────────────── */
+function heatStage(feels) {
+  if (feels >= 38) return {
+    key: "위험", color: "#F2555A", label: "위험 (폭염중대경보)",
+    action: "재난안전관리 긴급조치 외 옥외작업 중지. 무더위 시간대(14~17시) 작업 금지.",
+  };
+  if (feels >= 35) return {
+    key: "경고", color: "#FF7A3C", label: "경고 (폭염경보)",
+    action: "매 2시간마다 20분 이상 휴식 + 냉방·보냉장구(냉각조끼 등) 지급, 작업시간 단축.",
+  };
+  if (feels >= 33) return {
+    key: "주의", color: "#FFB224", label: "주의 (폭염주의보)",
+    action: "매 2시간 이내 20분 이상 휴식 제공(또는 1시간마다 10분). 물·그늘·휴식 준수.",
+  };
+  if (feels >= 31) return {
+    key: "관심", color: "#E8C24A", label: "관심 (폭염작업)",
+    action: "물·그늘·휴식 제공, 온·습도계 상시 비치, 작업 전 온열질환 예방교육(TBM).",
+  };
+  return {
+    key: "정상", color: "#46C68F", label: "정상",
+    action: "체감온도 31℃ 미만 — 통상 관리. 수분 섭취 권장.",
+  };
+}
+
+/* 기상청 여름철 체감온도 (2022 개정식)
+   Stull 습구온도(Tw)를 이용한 기상청 공식 산식.
+   폭염영향예보·폭염 단계 판정에 쓰이는 값과 동일 기준. */
+function feelsLike(temp, humidity) {
+  const Ta = temp, RH = Math.min(100, Math.max(0, humidity));
+  if (Ta < 25) return +Ta.toFixed(1); // 여름철 산식 적용 범위 밖은 기온 그대로
+  // Stull 습구온도(℃)
+  const Tw =
+    Ta * Math.atan(0.151977 * Math.sqrt(RH + 8.313659)) +
+    Math.atan(Ta + RH) -
+    Math.atan(RH - 1.67633) +
+    0.00391838 * Math.pow(RH, 1.5) * Math.atan(0.023101 * RH) -
+    4.686035;
+  const at =
+    -0.2442 + 0.55399 * Tw + 0.45535 * Ta -
+    0.0022 * Tw * Tw + 0.00278 * Tw * Ta + 3.0;
+  return +Math.max(Ta, at).toFixed(1);
+}
+
+/* ───────────────────── 기상청 초단기실황 연동 (영종도) ─────────────────────
+   공공데이터포털 기상청_단기예보 조회서비스 > 초단기실황(getUltraSrtNcst)
+   영종도(인천 중구) 격자 좌표: nx=55, ny=124
+   T1H=기온(℃), REH=습도(%). 매시 정각 관측 → 약 40분 후 제공(10분 주기 갱신).
+
+   ⚠️ 사용법: 아래 KMA_SERVICE_KEY 에 공공데이터포털에서 발급받은
+   "일반 인증키(Encoding)" 를 붙여넣으면 실제 영종도 기온이 연동됩니다.
+   키가 없거나 브라우저 CORS로 호출이 막히면 자동으로 가상 데이터로 대체됩니다.
+   (실서비스에서는 백엔드 프록시를 통해 호출하는 것을 권장)
+──────────────────────────────────────────────────── */
+const KMA_SERVICE_KEY = ""; // ← 여기에 공공데이터포털 인증키(Encoding) 입력
+const KMA_NX = 55, KMA_NY = 124; // 영종도(인천 중구)
+
+function kmaBaseDateTime() {
+  const d = new Date();
+  // 실황은 매시 정각 관측, 40분 이후 제공 → 40분 이전이면 한 시간 전 기준
+  if (d.getMinutes() < 40) d.setHours(d.getHours() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const h = String(d.getHours()).padStart(2, "0");
+  return { base_date: `${y}${m}${day}`, base_time: `${h}00` };
+}
+
+async function fetchYeongjongTemp() {
+  if (!KMA_SERVICE_KEY) return null;
+  const { base_date, base_time } = kmaBaseDateTime();
+  const url =
+    "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst" +
+    `?serviceKey=${KMA_SERVICE_KEY}&dataType=JSON&numOfRows=10&pageNo=1` +
+    `&base_date=${base_date}&base_time=${base_time}&nx=${KMA_NX}&ny=${KMA_NY}`;
+  const res = await fetch(url);
+  const json = await res.json();
+  const items = json?.response?.body?.items?.item || [];
+  const temp = items.find((x) => x.category === "T1H");
+  const hum = items.find((x) => x.category === "REH");
+  if (!temp) return null;
+  return { temp: parseFloat(temp.obsrValue), humidity: hum ? parseFloat(hum.obsrValue) : 60 };
+}
+
+/* ───────────────────── 온도 피드 훅 (외부=기상청 / 내부=가상) ───────────────────── */
+function useTempFeed() {
+  const outdoor = useRef({ temp: 33, humidity: 62, live: false });
+  const [live, setLive] = useState(false);
+
+  const mk = (now, i, ext, intr, hum) => ({
+    t: new Date(now - i * 5000).toLocaleTimeString("ko-KR", { hour12: false, minute: "2-digit", second: "2-digit" }),
+    외부: +ext.toFixed(1), 내부: +intr.toFixed(1),
+    습도: Math.round(hum), 체감: feelsLike(ext, hum),
+  });
+
+  const [data, setData] = useState(() => {
+    const now = Date.now();
+    const arr = [];
+    let ext = 33, intr = 24, hum = 62;
+    for (let i = 29; i >= 0; i--) {
+      ext += (Math.random() - 0.5) * 0.6;
+      intr += (Math.random() - 0.5) * 0.4;
+      hum = Math.min(85, Math.max(40, hum + (Math.random() - 0.5) * 2));
+      arr.push(mk(now, i, ext, intr, hum));
+    }
+    return arr;
+  });
+
+  // 기상청 실황 폴링 (5분 주기)
+  useEffect(() => {
+    let alive = true;
+    const pull = async () => {
+      try {
+        const r = await fetchYeongjongTemp();
+        if (alive && r) {
+          outdoor.current = { temp: r.temp, humidity: r.humidity, live: true };
+          setLive(true);
+        }
+      } catch (e) { /* CORS·키 오류 시 가상 유지 */ }
+    };
+    pull();
+    const iv = setInterval(pull, 5 * 60 * 1000);
+    return () => { alive = false; clearInterval(iv); };
+  }, []);
+
+  // 차트 갱신 (3초): 외부=실황값 유지(가상일 땐 완만한 변동), 내부=가상
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setData((prev) => {
+        const last = prev[prev.length - 1];
+        const o = outdoor.current;
+        const ext = o.live
+          ? o.temp + (Math.random() - 0.5) * 0.15
+          : last.외부 + (Math.random() - 0.48) * 0.6;
+        const hum = o.live ? o.humidity : Math.min(85, Math.max(40, last.습도 + (Math.random() - 0.5) * 2));
+        const intr = last.내부 + (Math.random() - 0.5) * 0.4;
+        return [...prev.slice(1), mk(Date.now(), 0, ext, intr, hum)];
+      });
+    }, 3000);
+    return () => clearInterval(iv);
+  }, []);
+
+  return { data, live };
+}
+
+/* ───────────────────── AI 에이전트 ───────────────────── */
+function AgentPanel({ open, onClose, permits, sentLinks }) {
+  const isMobile = useIsMobile();
+  const [msgs, setMsgs] = useState([
+    { role: "assistant", content: "안전관제 에이전트입니다. 작업허가서 현황, 알람 분석, 위험구역 판단, 서명 미완료 건 확인 등 무엇이든 물어보세요." },
+  ]);
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [msgs, busy]);
+
+  const context = useMemo(() => JSON.stringify({
+    현재시각: new Date().toLocaleString("ko-KR"),
+    현장목록: SITES,
+    작업허가서: permits,
+    최근알람: ALARMS.slice(0, 6),
+    위험히트맵: { 구역: HEAT_ROWS, 항목: HEAT_COLS, 점수: HEAT },
+    서명링크발송이력: sentLinks,
+  }), [permits, sentLinks]);
+
+  const ask = async () => {
+    const q = input.trim();
+    if (!q || busy) return;
+    const history = [...msgs, { role: "user", content: q }];
+    setMsgs(history);
+    setInput("");
+    setBusy(true);
+    try {
+      const apiMessages = history.slice(1).map((m, i) =>
+        i === history.length - 2
+          ? { role: "user", content: `당신은 산업현장 안전관제 대시보드의 전담 AI 에이전트입니다. 아래 대시보드 실시간 데이터를 근거로 한국어로 간결하고 정확하게 답하세요. 데이터에 없는 내용은 추측하지 말고 없다고 말하세요.\n\n[대시보드 데이터]\n${context}\n\n[질문]\n${q}` }
+          : m
+      );
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: apiMessages }),
+      });
+      const data = await res.json();
+      const text = (data.content || []).map((c) => c.text || "").join("\n").trim() || "응답을 받지 못했습니다. 다시 시도해 주세요.";
+      setMsgs((m) => [...m, { role: "assistant", content: text }]);
+    } catch (e) {
+      setMsgs((m) => [...m, { role: "assistant", content: "네트워크 오류로 답변에 실패했습니다. 잠시 후 다시 시도해 주세요." }]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) return null;
+
+  const wrapStyle = isMobile
+    ? {
+        position: "fixed", inset: 0, zIndex: 100, background: T.panel2,
+        display: "flex", flexDirection: "column",
+      }
+    : {
+        width: 360, flexShrink: 0, borderLeft: `1px solid ${T.line}`, background: T.panel2,
+        display: "flex", flexDirection: "column", height: "100%",
+      };
+
+  return (
+    <div style={wrapStyle}>
+      <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.line}`, display: "flex", alignItems: "center", gap: 10 }}>
+        <Bot size={18} color={T.amber} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>안전관제 에이전트</div>
+          <div style={{ fontSize: 11, color: T.muted, fontFamily: T.mono }}>대시보드 데이터 연동됨</div>
+        </div>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", padding: 8 }}><X size={18} /></button>
+      </div>
+      <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+        {msgs.map((m, i) => (
+          <div key={i} style={{
+            alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+            maxWidth: "88%", padding: "10px 12px", borderRadius: 8, fontSize: 13, lineHeight: 1.55, whiteSpace: "pre-wrap",
+            background: m.role === "user" ? `${T.amber}22` : T.panel,
+            border: `1px solid ${m.role === "user" ? `${T.amber}44` : T.line}`,
+          }}>{m.content}</div>
+        ))}
+        {busy && <div style={{ fontSize: 12, color: T.muted, fontFamily: T.mono }}>분석 중…</div>}
+      </div>
+      <div style={{
+        padding: 12, borderTop: `1px solid ${T.line}`, display: "flex", gap: 8,
+        paddingBottom: isMobile ? "calc(12px + env(safe-area-inset-bottom))" : 12,
+      }}>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && ask()}
+          placeholder="예: 서명 안 된 허가서 알려줘"
+          style={{
+            flex: 1, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6,
+            color: T.text, padding: "12px", fontSize: 14, outline: "none", minWidth: 0,
+          }}
+        />
+        <button onClick={ask} disabled={busy} style={{
+          background: T.amber, border: "none", borderRadius: 6, width: 46, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center", opacity: busy ? 0.5 : 1, flexShrink: 0,
+        }}><Send size={16} color="#111" /></button>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────── 각 화면 ───────────────────── */
+function Overview({ permits, temp }) {
+  const isMobile = useIsMobile();
+  const pending = permits.filter((p) => p.status === "승인대기").length;
+  const active = permits.filter((p) => p.status === "진행중").length;
+  const unack = ALARMS.filter((a) => !a.ack).length;
+  const lastTemp = temp[temp.length - 1];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+        <Kpi label="진행중 허가" value={active} sub={`승인대기 ${pending}건`} color={T.cyan} />
+        <Kpi label="미확인 알람" value={unack} sub="즉시 확인 필요" color={unack > 0 ? T.red : T.green} />
+        <Kpi label="체감온도(옥외)" value={`${lastTemp.체감}°C`} sub={heatStage(lastTemp.체감).label} color={heatStage(lastTemp.체감).color} />
+        <Kpi label="가동 현장" value={SITES.length} sub={`작업자 ${SITES.reduce((s, x) => s + x.workers, 0)}명`} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
+        <Panel title="최근 7일 알람 발생">
+          <div style={{ height: 190 }}>
+            <ResponsiveContainer>
+              <BarChart data={ALARM_WEEK}>
+                <CartesianGrid stroke={T.line} vertical={false} />
+                <XAxis dataKey="day" stroke={T.muted} fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis stroke={T.muted} fontSize={12} tickLine={false} axisLine={false} width={24} />
+                <Tooltip contentStyle={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, fontSize: 12 }} />
+                <Bar dataKey="cnt" name="알람" radius={[3, 3, 0, 0]}>
+                  {ALARM_WEEK.map((d, i) => (
+                    <Cell key={i} fill={d.cnt >= 7 ? T.red : d.cnt >= 4 ? T.amber : "#2E3A4C"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+        <Panel title="미확인 알람">
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {ALARMS.filter((a) => !a.ack).map((a) => (
+              <div key={a.id} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <CircleAlert size={16} color={levelColor(a.level)} style={{ marginTop: 2, flexShrink: 0 }} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 13 }}>{a.msg}</div>
+                  <div style={{ fontSize: 11, color: T.muted, fontFamily: T.mono, marginTop: 2 }}>{a.time} · {a.site}</div>
+                </div>
+                <Badge color={levelColor(a.level)}>{a.level}</Badge>
+              </div>
+            ))}
+            {ALARMS.filter((a) => !a.ack).length === 0 && <div style={{ color: T.muted, fontSize: 13 }}>모든 알람이 확인되었습니다.</div>}
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function Permits({ permits, onSign }) {
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <Badge color={T.amber}>{permits.filter((p) => p.status === "승인대기").length}건 승인대기</Badge>
+        </div>
+        {permits.map((p) => (
+          <div key={p.id} style={{ background: T.panel, border: `1px solid ${T.line}`, borderRadius: 8, padding: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: T.mono, fontSize: 13, color: T.cyan }}>{p.id}</span>
+              <Badge color={statusColor(p.status)}>{p.status}</Badge>
+            </div>
+            <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600 }}>{p.type} · {workerLabel(p)}</div>
+            <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{p.site}</div>
+            <div style={{ fontSize: 12, color: T.muted, fontFamily: T.mono, marginTop: 4 }}>{p.start} ~ {p.end}</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+              {(() => { const { done, total } = signCount(p); return p.signed
+                ? <span style={{ color: T.green, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}><CircleCheck size={14} /> 서명 {done}/{total} 완료</span>
+                : <span style={{ color: T.amber, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}><Clock size={14} /> 서명 {done}/{total}</span>; })()}
+              {!p.signed && (
+                <button onClick={() => onSign(p)} style={{
+                  background: `${T.amber}18`, border: `1px solid ${T.amber}66`, color: T.amber,
+                  borderRadius: 6, padding: "8px 14px", fontSize: 13, cursor: "pointer",
+                }}>서명링크 전송</button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <Panel title="작업허가서 목록" right={<Badge color={T.amber}>{permits.filter((p) => p.status === "승인대기").length}건 승인대기</Badge>}>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 720 }}>
+          <thead>
+            <tr style={{ color: T.muted, fontFamily: T.mono, fontSize: 11, textAlign: "left" }}>
+              {["허가번호", "작업유형", "현장", "작업자", "작업시간", "상태", "서명", ""].map((h) => (
+                <th key={h} style={{ padding: "8px 10px", borderBottom: `1px solid ${T.line}`, fontWeight: 500 }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {permits.map((p) => (
+              <tr key={p.id} style={{ borderBottom: `1px solid ${T.line}` }}>
+                <td style={{ padding: "10px", fontFamily: T.mono, color: T.cyan }}>{p.id}</td>
+                <td style={{ padding: "10px" }}>{p.type}</td>
+                <td style={{ padding: "10px", color: T.muted }}>{p.site}</td>
+                <td style={{ padding: "10px" }}>{workerLabel(p)}</td>
+                <td style={{ padding: "10px", fontFamily: T.mono, fontSize: 12, color: T.muted }}>{p.start} ~ {p.end}</td>
+                <td style={{ padding: "10px" }}><Badge color={statusColor(p.status)}>{p.status}</Badge></td>
+                <td style={{ padding: "10px" }}>
+                  {(() => { const { done, total } = signCount(p); return p.signed
+                    ? <span style={{ color: T.green, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}><CircleCheck size={14} /> {done}/{total} 완료</span>
+                    : <span style={{ color: T.amber, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}><Clock size={14} /> {done}/{total} 서명</span>; })()}
+                </td>
+                <td style={{ padding: "10px" }}>
+                  {!p.signed && (
+                    <button onClick={() => onSign(p)} style={{
+                      background: "none", border: `1px solid ${T.amber}66`, color: T.amber,
+                      borderRadius: 4, padding: "4px 10px", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap",
+                    }}>서명링크 전송</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
+  );
+}
+
+function AlarmHistory() {
+  const isMobile = useIsMobile();
+  const [filter, setFilter] = useState("전체");
+  const levels = ["전체", "긴급", "경고", "주의"];
+  const list = ALARMS.filter((a) => filter === "전체" || a.level === filter);
+  return (
+    <Panel
+      title="알람 이력"
+      right={
+        <div style={{ display: "flex", gap: 6 }}>
+          {levels.map((lv) => (
+            <button key={lv} onClick={() => setFilter(lv)} style={{
+              background: filter === lv ? `${T.amber}22` : "none",
+              border: `1px solid ${filter === lv ? T.amber : T.line}`,
+              color: filter === lv ? T.amber : T.muted,
+              borderRadius: 4, padding: "4px 10px", fontSize: 12, cursor: "pointer",
+            }}>{lv}</button>
+          ))}
+        </div>
+      }
+    >
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {list.map((a) => (
+          <div key={a.id} style={{
+            display: "flex", gap: 10, alignItems: isMobile ? "flex-start" : "center",
+            padding: "12px 2px", borderBottom: `1px solid ${T.line}`,
+            flexWrap: isMobile ? "wrap" : "nowrap",
+          }}>
+            <span style={{
+              width: 8, height: 8, borderRadius: "50%", flexShrink: 0, marginTop: isMobile ? 6 : 0,
+              background: levelColor(a.level),
+              boxShadow: a.ack ? "none" : `0 0 8px ${levelColor(a.level)}`,
+            }} />
+            {!isMobile && <span style={{ fontFamily: T.mono, fontSize: 12, color: T.muted, width: 92, flexShrink: 0 }}>{a.time}</span>}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13 }}>{a.msg}</div>
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+                {isMobile ? `${a.time} · ` : ""}{a.site} · {a.type}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <Badge color={levelColor(a.level)}>{a.level}</Badge>
+              <span style={{ fontSize: 11, fontFamily: T.mono, color: a.ack ? T.green : T.red }}>
+                {a.ack ? "확인됨" : "미확인"}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function Heatmap() {
+  const cellColor = (v) => {
+    if (v >= 75) return T.red;
+    if (v >= 50) return T.amber;
+    if (v >= 25) return "#C9A64A";
+    return T.green;
+  };
+  return (
+    <Panel title="구역별 위험 히트맵 (0–100)" right={<Badge color={T.red}>최고 88 · BOH 질식(주방덕트)</Badge>}>
+      <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: `72px repeat(${HEAT_COLS.length}, minmax(76px, 1fr))`,
+          gap: 5, minWidth: 480,
+        }}>
+          <div />
+          {HEAT_COLS.map((c) => (
+            <div key={c} style={{ textAlign: "center", fontSize: 11, color: T.muted, fontFamily: T.mono, paddingBottom: 4 }}>{c}</div>
+          ))}
+          {HEAT_ROWS.map((r, ri) => (
+            <React.Fragment key={r}>
+              <div style={{ fontSize: 11, color: T.muted, fontFamily: T.mono, display: "flex", alignItems: "center" }}>{r}</div>
+              {HEAT[ri].map((v, ci) => {
+                const c = cellColor(v);
+                return (
+                  <div key={ci} title={`${r} · ${HEAT_COLS[ci]}: ${v}`} style={{
+                    background: `${c}${Math.round(30 + (v / 100) * 60).toString(16).padStart(2, "0")}`,
+                    border: `1px solid ${c}66`, borderRadius: 5, height: 48,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontFamily: T.mono, fontSize: 14, fontWeight: 700,
+                    color: v >= 50 ? "#0B0F14" : T.text,
+                  }}>{v}</div>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 14, marginTop: 14, fontSize: 11, color: T.muted, fontFamily: T.mono, flexWrap: "wrap" }}>
+        <span><span style={{ color: T.green }}>■</span> 0–24 낮음</span>
+        <span><span style={{ color: "#C9A64A" }}>■</span> 25–49 보통</span>
+        <span><span style={{ color: T.amber }}>■</span> 50–74 주의</span>
+        <span><span style={{ color: T.red }}>■</span> 75+ 위험</span>
+      </div>
+    </Panel>
+  );
+}
+
+function TempFeed({ temp, live }) {
+  const isMobile = useIsMobile();
+  const last = temp[temp.length - 1];
+  const stage = heatStage(last.체감);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* 데이터 출처 상태 */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <Badge color={live ? T.green : T.amber}>
+          외부: {live ? "기상청 영종도 실황 연동" : "가상 데이터 (기상청 연동 대기)"}
+        </Badge>
+        <Badge color={T.cyan}>내부: 가상 센서</Badge>
+      </div>
+
+      {/* 온열질환(폭염) 단계 경보 배너 */}
+      <div style={{
+        background: `${stage.color}12`, border: `1px solid ${stage.color}66`,
+        borderRadius: 10, padding: 16, display: "flex", gap: 14,
+        alignItems: isMobile ? "flex-start" : "center", flexDirection: isMobile ? "column" : "row",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+          <CircleAlert size={30} color={stage.color} />
+          <div>
+            <div style={{ fontSize: 11, color: T.muted, fontFamily: T.mono }}>옥외작업 온열질환 단계</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: stage.color }}>{stage.label}</div>
+          </div>
+        </div>
+        <div style={{
+          display: "flex", gap: 18, alignItems: "center",
+          paddingLeft: isMobile ? 0 : 16, marginLeft: isMobile ? 0 : "auto",
+        }}>
+          <div>
+            <div style={{ fontSize: 11, color: T.muted }}>외부 기온 (영종도)</div>
+            <div style={{ fontSize: 22, fontWeight: 700, fontFamily: T.mono }}>{last.외부}°C</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: T.muted }}>습도</div>
+            <div style={{ fontSize: 22, fontWeight: 700, fontFamily: T.mono }}>{last.습도}%</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: T.muted }}>체감온도</div>
+            <div style={{ fontSize: 22, fontWeight: 700, fontFamily: T.mono, color: stage.color }}>{last.체감}°C</div>
+          </div>
+        </div>
+      </div>
+      <div style={{
+        background: T.panel, border: `1px solid ${T.line}`, borderRadius: 8,
+        padding: "12px 16px", fontSize: 13, display: "flex", gap: 10, alignItems: "flex-start",
+      }}>
+        <span style={{ color: stage.color, fontWeight: 700, whiteSpace: "nowrap" }}>필수 조치</span>
+        <span style={{ color: T.text, lineHeight: 1.5 }}>{stage.action}</span>
+      </div>
+
+      {/* 온도 센서 */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+        <Kpi label="외부 (영종도 옥외)" value={`${last.외부}°C`} sub={live ? "기상청 실황" : "옥외작업 기준"} color={last.외부 > 33 ? T.amber : T.cyan} />
+        <Kpi label="내부 (로비·객실)" value={`${last.내부}°C`} sub="쾌적범위 22~26°C" color={last.내부 > 28 || last.내부 < 20 ? T.amber : T.green} />
+        <Kpi label="습도" value={`${last.습도}%`} sub="쾌적범위 40~60%" color={last.습도 > 70 ? T.amber : T.green} />
+      </div>
+
+      <Panel
+        title="실시간 온도 피드"
+        right={
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontFamily: T.mono, color: live ? T.green : T.red }}>
+            <Radio size={13} /> {live ? "LIVE · 기상청" : "LIVE · 가상"}
+          </span>
+        }
+      >
+        <div style={{ height: isMobile ? 220 : 300 }}>
+          <ResponsiveContainer>
+            <LineChart data={temp}>
+              <CartesianGrid stroke={T.line} vertical={false} />
+              <XAxis dataKey="t" stroke={T.muted} fontSize={11} tickLine={false} axisLine={false} minTickGap={40} />
+              <YAxis stroke={T.muted} fontSize={11} tickLine={false} axisLine={false} width={34} domain={["auto", "auto"]} unit="°" />
+              <Tooltip contentStyle={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, fontSize: 12 }} />
+              <Line type="monotone" dataKey="외부" stroke={T.amber} dot={false} strokeWidth={2} isAnimationActive={false} />
+              <Line type="monotone" dataKey="체감" stroke="#FF7A3C" dot={false} strokeWidth={1.5} strokeDasharray="4 3" isAnimationActive={false} />
+              <Line type="monotone" dataKey="내부" stroke={T.cyan} dot={false} strokeWidth={2} isAnimationActive={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div style={{ display: "flex", gap: 14, marginTop: 10, fontSize: 12, fontFamily: T.mono, flexWrap: "wrap" }}>
+          <span style={{ color: T.amber }}>— 외부(영종도)</span>
+          <span style={{ color: "#FF7A3C" }}>--- 체감온도</span>
+          <span style={{ color: T.cyan }}>— 내부(가상)</span>
+        </div>
+      </Panel>
+
+      {/* 폭염 단계 기준표 */}
+      <Panel title="폭염(온열질환) 단계 기준 · 산안규칙 제558~560조">
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 520 }}>
+            <thead>
+              <tr style={{ color: T.muted, fontFamily: T.mono, fontSize: 11, textAlign: "left" }}>
+                {["단계", "체감온도", "주요 의무 조치"].map((h) => (
+                  <th key={h} style={{ padding: "8px 10px", borderBottom: `1px solid ${T.line}`, fontWeight: 500 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["관심", "31℃ 이상", "물·그늘·휴식 제공, 온·습도계 비치, 예방교육", "#E8C24A"],
+                ["주의", "33℃ 이상", "매 2시간 이내 20분 이상 휴식(1시간마다 10분 가능)", T.amber],
+                ["경고", "35℃ 이상", "냉방·보냉장구 지급, 작업시간 단축", "#FF7A3C"],
+                ["위험", "38℃ 이상", "긴급조치 외 옥외작업 중지", T.red],
+              ].map(([lv, t, a, c]) => (
+                <tr key={lv} style={{ borderBottom: `1px solid ${T.line}`, background: stage.key === lv ? `${c}12` : "transparent" }}>
+                  <td style={{ padding: "10px" }}><Badge color={c}>{lv}</Badge></td>
+                  <td style={{ padding: "10px", fontFamily: T.mono }}>{t}</td>
+                  <td style={{ padding: "10px", color: T.muted }}>{a}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ fontSize: 11, color: T.muted, marginTop: 10, lineHeight: 1.5 }}>
+          외부 온도·습도는 기상청 초단기실황(영종도, 격자 nx=55·ny=124) API로 연동됩니다. 코드 상단 KMA_SERVICE_KEY에 공공데이터포털 인증키를 입력하면 실측값이 표시되며, 키가 없거나 브라우저 보안(CORS)으로 호출이 막히면 자동으로 가상 데이터로 표시됩니다. 실서비스에서는 백엔드 프록시 경유를 권장합니다. 체감온도는 기온·습도로 산정한 추정치입니다.
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function SiteList() {
+  const sc = (s) => (s === "경고" ? T.red : s === "주의" ? T.amber : T.green);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 12 }}>
+      {SITES.map((s) => (
+        <div key={s.id} style={{ background: T.panel, border: `1px solid ${T.line}`, borderRadius: 8, padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <MapPin size={16} color={sc(s.status)} />
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{s.name}</span>
+            </div>
+            <Badge color={sc(s.status)}>{s.status}</Badge>
+          </div>
+          <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 12 }}>
+            <div><div style={{ color: T.muted, fontSize: 11 }}>안전관리자</div>{s.manager}</div>
+            <div><div style={{ color: T.muted, fontSize: 11 }}>작업 인원</div><span style={{ fontFamily: T.mono }}>{s.workers}명</span></div>
+            <div><div style={{ color: T.muted, fontSize: 11 }}>위험도</div>{s.risk}</div>
+            <div><div style={{ color: T.muted, fontSize: 11 }}>현장코드</div><span style={{ fontFamily: T.mono, color: T.cyan }}>{s.id}</span></div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SignLink({ permits, sentLinks, onSend, preselect }) {
+  const isMobile = useIsMobile();
+  const unsignedPermits = permits.filter((p) => !p.signed);
+  const [sel, setSel] = useState(preselect || (unsignedPermits[0] ? unsignedPermits[0].id : ""));
+  useEffect(() => { if (preselect) setSel(preselect); }, [preselect]);
+  const permit = permits.find((p) => p.id === sel);
+
+  return (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: isMobile ? "1fr" : "minmax(300px, 400px) 1fr",
+      gap: 14, alignItems: "start",
+    }}>
+      <Panel title="서명링크 발송">
+        <label style={{ fontSize: 12, color: T.muted, display: "block", marginBottom: 6 }}>대상 작업허가서 (미서명)</label>
+        <select
+          value={sel}
+          onChange={(e) => setSel(e.target.value)}
+          style={{
+            width: "100%", background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6,
+            color: T.text, padding: "12px", fontSize: 14, outline: "none",
+          }}
+        >
+          {unsignedPermits.length === 0 && <option value="">미서명 허가서 없음</option>}
+          {unsignedPermits.map((p) => (
+            <option key={p.id} value={p.id}>{p.id} · {p.type} · {p.worker}</option>
+          ))}
+        </select>
+        {permit && (
+          <div style={{
+            marginTop: 14, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6,
+            padding: 14, fontSize: 13, display: "flex", flexDirection: "column", gap: 10,
+          }}>
+            <div><span style={{ color: T.muted }}>현장</span>  {permit.site}</div>
+            <div style={{ fontFamily: T.mono, fontSize: 12, color: T.cyan, wordBreak: "break-all" }}>
+              <Link2 size={12} style={{ verticalAlign: "-2px", marginRight: 4 }} />
+              https://sign.inspire-safety.kr/p/{permit.id.toLowerCase()}
+            </div>
+            <div style={{ borderTop: `1px solid ${T.line}`, paddingTop: 10 }}>
+              <div style={{ fontSize: 11, color: T.muted, marginBottom: 8 }}>
+                작업자 명단 · 서명 {permitWorkers(permit).filter((w) => w.signed).length}/{permitWorkers(permit).length}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {permitWorkers(permit).map((w, i) => (
+                  <div key={i} style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "8px 10px", background: T.panel2, borderRadius: 6,
+                    border: `1px solid ${w.signed ? `${T.green}44` : T.line}`,
+                  }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{w.name}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>{w.contact}</span>
+                    {w.signed ? (
+                      <span style={{ marginLeft: "auto", color: T.green, fontSize: 11, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                        <CircleCheck size={13} /> 서명완료
+                      </span>
+                    ) : (
+                      <button onClick={() => onSend(permit, [w])} style={{
+                        marginLeft: "auto", background: `${T.amber}16`, border: `1px solid ${T.amber}55`,
+                        color: T.amber, borderRadius: 5, padding: "5px 10px", fontSize: 11, cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}>링크 전송</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        <button
+          disabled={!permit || permitWorkers(permit || {}).filter((w) => !w.signed).length === 0}
+          onClick={() => permit && onSend(permit, permitWorkers(permit).filter((w) => !w.signed))}
+          style={{
+            marginTop: 14, width: "100%",
+            background: permit && permitWorkers(permit).some((w) => !w.signed) ? T.amber : T.line,
+            border: "none",
+            borderRadius: 6, padding: "14px 0", fontSize: 15, fontWeight: 700,
+            cursor: permit && permitWorkers(permit).some((w) => !w.signed) ? "pointer" : "default",
+            color: "#111", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          }}
+        >
+          <MessageSquareText size={16} /> 미서명 작업자 전원에게 전송
+        </button>
+        <div style={{ fontSize: 11, color: T.muted, marginTop: 10, lineHeight: 1.5 }}>
+          데모 환경에서는 문자 발송을 시뮬레이션합니다. 실서비스에서는 SMS/알림톡 API(예: 솔라피, NHN Cloud) 연동이 필요합니다.
+        </div>
+      </Panel>
+      <Panel title="발송 이력">
+        {sentLinks.length === 0 ? (
+          <div style={{ color: T.muted, fontSize: 13 }}>아직 발송된 서명링크가 없습니다. 허가서를 선택해 전송하세요.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {sentLinks.map((l, i) => (
+              <div key={i} style={{
+                display: "flex", gap: 10, alignItems: "center", padding: "10px 2px",
+                borderBottom: `1px solid ${T.line}`, fontSize: 13, flexWrap: "wrap",
+              }}>
+                <CircleCheck size={15} color={T.green} style={{ flexShrink: 0 }} />
+                <span style={{ fontFamily: T.mono, color: T.cyan }}>{l.permitId}</span>
+                <span>{l.worker}</span>
+                <span style={{ fontFamily: T.mono, color: T.muted, fontSize: 12 }}>{l.contact}</span>
+                <span style={{ marginLeft: "auto", fontFamily: T.mono, fontSize: 11, color: T.muted }}>{l.time}</span>
+                <Badge color={T.green}>전송됨</Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+/* ───────────────────── 작업허가서 작성 폼 ─────────────────────
+   법적 근거
+   - 산업안전보건법 제38조(안전조치)·제39조(보건조치), 제63·64조(도급 시 안전보건 확보)
+   - 산업안전보건기준에 관한 규칙 제241조의2(화재위험작업 시 준수사항), 제619조(밀폐공간 작업 프로그램)
+   - KOSHA GUIDE P-94(안전작업허가 지침): 화기작업허가 / 일반위험작업허가 / 보충작업허가
+──────────────────────────────────────────────────── */
+const FORM_TYPES = [
+  { key: "general", label: "일반작업허가서", desc: "화기작업 외 일반 위험작업 · KOSHA GUIDE P-94 일반위험작업허가" },
+  { key: "hazard", label: "위험작업허가서", desc: "화기·밀폐공간·정전·굴착·고소 등 · 산안법 제38조, 안전보건규칙 제241조의2·제619조" },
+  { key: "rental", label: "임대·대관 작업허가서", desc: "입주·임대업체 및 시설 대관 작업 · 도급 시 산안법 제63·64조 안전보건 확보 의무" },
+];
+
+const HAZARD_KINDS = ["화기작업", "밀폐공간 출입", "정전(전기)작업", "굴착작업", "고소작업", "중장비 사용", "방사선 사용"];
+
+const FORM_CHECKS = {
+  general: [
+    "작업구역 설정 및 출입통제 조치",
+    "개인 안전보호구 지급·착용 확인",
+    "위험성평가(JSA) 실시",
+    "작업 전 안전교육(TBM) 실시",
+    "MSDS 확인 및 비치 (화학물질 취급 시)",
+    "작업장 정리정돈 및 통로 확보",
+  ],
+  hazard: [
+    "가스·산소 농도 측정 (작업 전/작업 중)",
+    "배관·밸브 차단 및 맹판 설치",
+    "잠금장치 및 꼬리표 부착 (LOTO)",
+    "용기 내부 세정·퍼지 및 환기 조치",
+    "소화기·소화설비 배치 (화기작업 시)",
+    "화기감시자/밀폐공간 감시인 배치",
+    "안전대 부착설비 등 추락방지 조치 (고소작업 시)",
+    "조명 및 비상연락체계 확보",
+  ],
+  rental: [
+    "시설 안전수칙 및 관리규정 준수 서약",
+    "화기 사용 금지 (필요 시 별도 화기작업허가 신청)",
+    "전기·기계설비 임의 조작 금지",
+    "비상대피로·소방시설 주변 물건 적치 금지",
+    "작업(행사) 종료 후 원상복구",
+    "영업배상책임보험 등 보험 가입 확인",
+    "사고 발생 시 시설 관리부서 즉시 통보",
+  ],
+};
+
+function SignaturePad({ title, onSave, onClose }) {
+  const canvasRef = useRef(null);
+  const drawing = useRef(false);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    const c = canvasRef.current;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = c.getBoundingClientRect();
+    c.width = rect.width * dpr;
+    c.height = rect.height * dpr;
+    const ctx = c.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.strokeStyle = "#E6EDF5";
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+  }, []);
+
+  const pos = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return { x: p.clientX - rect.left, y: p.clientY - rect.top };
+  };
+  const start = (e) => {
+    drawing.current = true;
+    const ctx = canvasRef.current.getContext("2d");
+    const { x, y } = pos(e);
+    ctx.beginPath(); ctx.moveTo(x, y);
+  };
+  const move = (e) => {
+    if (!drawing.current) return;
+    e.preventDefault();
+    const ctx = canvasRef.current.getContext("2d");
+    const { x, y } = pos(e);
+    ctx.lineTo(x, y); ctx.stroke();
+    setDirty(true);
+  };
+  const end = () => { drawing.current = false; };
+  const clear = () => {
+    const c = canvasRef.current;
+    const ctx = c.getContext("2d");
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, c.width, c.height);
+    ctx.restore();
+    setDirty(false);
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.7)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 440, background: T.panel, border: `1px solid ${T.line}`,
+        borderRadius: 10, overflow: "hidden",
+      }}>
+        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${T.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>{title} 서명</div>
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>아래 영역에 손가락 또는 마우스로 서명하세요</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", padding: 6 }}><X size={18} /></button>
+        </div>
+        <div style={{ padding: 16 }}>
+          <canvas
+            ref={canvasRef}
+            onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
+            onTouchStart={start} onTouchMove={move} onTouchEnd={end}
+            style={{
+              width: "100%", height: 180, background: T.bg,
+              border: `1px dashed ${T.line}`, borderRadius: 8,
+              touchAction: "none", display: "block", cursor: "crosshair",
+            }}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button onClick={clear} style={{
+              flex: 1, background: "none", border: `1px solid ${T.line}`, borderRadius: 6,
+              color: T.muted, padding: "12px 0", fontSize: 13, cursor: "pointer",
+            }}>지우기</button>
+            <button
+              disabled={!dirty}
+              onClick={() => onSave(canvasRef.current.toDataURL("image/png"))}
+              style={{
+                flex: 2, background: dirty ? T.green : T.line, border: "none", borderRadius: 6,
+                color: "#0B0F14", padding: "12px 0", fontSize: 14, fontWeight: 700,
+                cursor: dirty ? "pointer" : "default",
+              }}
+            >서명 저장</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, required, children, span }) {
+  return (
+    <div style={{ gridColumn: span ? "1 / -1" : "auto" }}>
+      <label style={{ fontSize: 12, color: T.muted, display: "block", marginBottom: 6 }}>
+        {label} {required && <span style={{ color: T.red }}>*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function PermitForm({ onSubmit }) {
+  const isMobile = useIsMobile();
+  const inp = {
+    width: "100%", background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6,
+    color: T.text, padding: "11px 12px", fontSize: 13, outline: "none", boxSizing: "border-box",
+  };
+  const empty = {
+    site: SITES[0].name, location: "", desc: "", start: "", end: "",
+    supervisor: "", worker: "", contact: "", headcount: 1,
+    company: "", bizno: "", purpose: "", equipment: "",
+    o2: "", lel: "", co: "", watcher: "",
+  };
+  const [formType, setFormType] = useState("general");
+  const [f, setF] = useState(empty);
+  const [kinds, setKinds] = useState([]);
+  const [checks, setChecks] = useState([]);
+  const [err, setErr] = useState(null);
+  const [workers, setWorkers] = useState([{ name: "", contact: "", sig: null }]);
+  const [sigTarget, setSigTarget] = useState(null); // 작업자 서명패드 대상 index
+  // 승인 서명: 인스파이어 책임자 / 인스파이어 담당자 / 공사업체 책임자
+  const [approvals, setApprovals] = useState({
+    inspireManager: { name: "", sig: null },
+    inspireStaff: { name: "", sig: null },
+    contractor: { name: "", sig: null },
+  });
+  const [apprSigTarget, setApprSigTarget] = useState(null); // 승인 서명패드 대상 key
+
+  const APPROVAL_ROLES = [
+    { key: "inspireManager", label: "인스파이어 책임자", hint: "구역 안전책임자 (발급 승인)" },
+    { key: "inspireStaff", label: "인스파이어 담당자", hint: "현장 확인·입회 담당" },
+    { key: "contractor", label: "공사업체 책임자", hint: "시공/작업 수행 업체" },
+  ];
+  const setApproval = (key, patch) => setApprovals((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+
+  const setWorker = (i, k, v) => setWorkers((prev) => prev.map((w, idx) => (idx === i ? { ...w, [k]: v } : w)));
+  const addWorker = () => setWorkers((prev) => [...prev, { name: "", contact: "", sig: null }]);
+  const removeWorker = (i) => setWorkers((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
+
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  const toggle = (arr, setArr, v) => setArr(arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+  const switchType = (t) => {
+    setFormType(t); setKinds([]); setChecks([]); setErr(null);
+    setApprovals({ inspireManager: { name: "", sig: null }, inspireStaff: { name: "", sig: null }, contractor: { name: "", sig: null } });
+  };
+
+  const submit = () => {
+    if (!f.desc.trim()) return setErr("작업 내용을 입력하세요.");
+    if (!f.start || !f.end) return setErr("작업 시작/종료 일시를 입력하세요.");
+    if (!f.worker.trim() || !f.contact.trim()) return setErr("작업(행사) 책임자 성명과 연락처를 입력하세요.");
+    if (workers.some((w) => !w.name.trim() || !w.contact.trim()))
+      return setErr("모든 작업자의 성명과 연락처를 빠짐없이 기입하세요. 미기입 작업자는 허가서에 등재할 수 없습니다.");
+    if (formType === "hazard" && kinds.length === 0) return setErr("위험작업 종류를 1개 이상 선택하세요.");
+    if (formType === "rental" && !f.company.trim()) return setErr("임대(대관) 업체명을 입력하세요.");
+    const required = FORM_CHECKS[formType];
+    if (checks.length < required.length) return setErr("모든 안전조치 확인 항목에 체크해야 발급 신청이 가능합니다.");
+    for (const r of APPROVAL_ROLES) {
+      if (!approvals[r.key].name.trim()) return setErr(`${r.label} 성명을 입력하세요.`);
+      if (!approvals[r.key].sig) return setErr(`${r.label} 서명이 필요합니다.`);
+    }
+
+    const typeLabel =
+      formType === "general" ? "일반작업" :
+      formType === "rental" ? "임대·대관" :
+      kinds[0] + (kinds.length > 1 ? ` 외 ${kinds.length - 1}` : "");
+    onSubmit({
+      type: typeLabel,
+      site: formType === "rental" ? `${f.site} / ${f.company}` : f.site,
+      worker: f.worker, contact: f.contact,
+      workers: workers.map((w) => ({ name: w.name.trim(), contact: w.contact.trim(), signed: !!w.sig, sig: w.sig })),
+      approvals: {
+        inspireManager: { ...approvals.inspireManager },
+        inspireStaff: { ...approvals.inspireStaff },
+        contractor: { ...approvals.contractor },
+      },
+      start: f.start.slice(5).replace("T", " "), end: f.end.slice(5).replace("T", " "),
+      detail: { formType, ...f, kinds, checks },
+    });
+    setF(empty); setKinds([]); setChecks([]); setWorkers([{ name: "", contact: "", sig: null }]);
+    setApprovals({ inspireManager: { name: "", sig: null }, inspireStaff: { name: "", sig: null }, contractor: { name: "", sig: null } });
+    setErr(null);
+  };
+
+  const cur = FORM_TYPES.find((t) => t.key === formType);
+  const grid2 = { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 860 }}>
+      {/* 허가서 종류 선택 */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 10 }}>
+        {FORM_TYPES.map((t) => (
+          <button key={t.key} onClick={() => switchType(t.key)} style={{
+            textAlign: "left", padding: 14, borderRadius: 8, cursor: "pointer",
+            background: formType === t.key ? `${T.amber}14` : T.panel,
+            border: `1px solid ${formType === t.key ? T.amber : T.line}`,
+            color: T.text,
+          }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: formType === t.key ? T.amber : T.text }}>{t.label}</div>
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 6, lineHeight: 1.5 }}>{t.desc}</div>
+          </button>
+        ))}
+      </div>
+
+      <Panel title={`${cur.label} 작성`} right={<Badge color={T.cyan}>KOSHA GUIDE P-94 기반</Badge>}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* 기본 정보 */}
+          <div style={grid2}>
+            <Field label="대상 현장" required>
+              <select value={f.site} onChange={set("site")} style={inp}>
+                {SITES.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+            </Field>
+            <Field label={formType === "rental" ? "대관 시설/구역" : "작업 장소 (상세)"} required>
+              <input value={f.location} onChange={set("location")} placeholder={formType === "rental" ? "예: Rotunda 대관 행사장" : "예: BOH 주방덕트 / Rotunda 천장부"} style={inp} />
+            </Field>
+            <Field label={formType === "rental" ? "사용 목적 및 작업(행사) 내용" : "작업 내용"} required span>
+              <textarea value={f.desc} onChange={set("desc")} rows={3} placeholder="작업 범위, 방법, 사용 장비 등을 구체적으로 기재" style={{ ...inp, resize: "vertical", fontFamily: "inherit" }} />
+            </Field>
+            <Field label="시작 일시" required>
+              <input type="datetime-local" value={f.start} onChange={set("start")} style={inp} />
+            </Field>
+            <Field label="종료 일시" required>
+              <input type="datetime-local" value={f.end} onChange={set("end")} style={inp} />
+            </Field>
+          </div>
+
+          {/* 임대·대관 전용 */}
+          {formType === "rental" && (
+            <div style={grid2}>
+              <Field label="임대(대관) 업체명" required>
+                <input value={f.company} onChange={set("company")} placeholder="예: (주)한빛이엔지" style={inp} />
+              </Field>
+              <Field label="사업자등록번호">
+                <input value={f.bizno} onChange={set("bizno")} placeholder="000-00-00000" style={inp} />
+              </Field>
+              <Field label="반입 장비/물품" span>
+                <input value={f.equipment} onChange={set("equipment")} placeholder="예: 음향장비 1식, 이동식 리프트 1대" style={inp} />
+              </Field>
+            </div>
+          )}
+
+          {/* 위험작업 전용 */}
+          {formType === "hazard" && (
+            <>
+              <div>
+                <div style={{ fontSize: 12, color: T.muted, marginBottom: 8 }}>위험작업 종류 <span style={{ color: T.red }}>*</span> (복수 선택 가능 — 보충작업허가 병행)</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {HAZARD_KINDS.map((k) => (
+                    <button key={k} onClick={() => toggle(kinds, setKinds, k)} style={{
+                      padding: "8px 14px", borderRadius: 20, fontSize: 13, cursor: "pointer",
+                      background: kinds.includes(k) ? `${T.red}22` : T.bg,
+                      border: `1px solid ${kinds.includes(k) ? T.red : T.line}`,
+                      color: kinds.includes(k) ? T.red : T.muted,
+                    }}>{k}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12 }}>
+                <Field label="산소농도 (%)"><input value={f.o2} onChange={set("o2")} placeholder="18.0~23.5" style={inp} /></Field>
+                <Field label="가연성가스 (%LEL)"><input value={f.lel} onChange={set("lel")} placeholder="< 10" style={inp} /></Field>
+                <Field label="CO (ppm)"><input value={f.co} onChange={set("co")} placeholder="< 30" style={inp} /></Field>
+                <Field label="감시인 성명"><input value={f.watcher} onChange={set("watcher")} placeholder="감시인/화기감시자" style={inp} /></Field>
+              </div>
+            </>
+          )}
+
+          {/* 작업 책임자 */}
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+            <Field label={formType === "rental" ? "행사(작업) 책임자" : "작업 책임자"} required>
+              <input value={f.worker} onChange={set("worker")} placeholder="성명" style={inp} />
+            </Field>
+            <Field label="책임자 연락처" required>
+              <input value={f.contact} onChange={set("contact")} placeholder="010-0000-0000" style={inp} />
+            </Field>
+          </div>
+
+          {/* 작업자 명단 (성명·연락처·서명 필수) */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>작업자 명단 <span style={{ color: T.red }}>*</span></span>
+              <span style={{ fontSize: 11, color: T.muted }}>전원 성명·연락처 필수 기입 · 서명은 현장 서명 또는 서명링크 발송으로 완료</span>
+              <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: T.mono, color: T.muted }}>
+                총 {workers.length}명 · 서명 {workers.filter((w) => w.sig).length}명
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {workers.map((w, i) => (
+                <div key={i} style={{
+                  display: "grid",
+                  gridTemplateColumns: isMobile ? "1fr" : "32px 1fr 1fr 130px 36px",
+                  gap: 8, alignItems: "center",
+                  background: T.bg, border: `1px solid ${w.sig ? `${T.green}55` : T.line}`,
+                  borderRadius: 8, padding: 10,
+                }}>
+                  <span style={{ fontFamily: T.mono, fontSize: 12, color: T.muted, textAlign: isMobile ? "left" : "center" }}>{i + 1}</span>
+                  <input
+                    value={w.name}
+                    onChange={(e) => setWorker(i, "name", e.target.value)}
+                    placeholder="작업자 성명"
+                    style={{ ...inp, background: T.panel2 }}
+                  />
+                  <input
+                    value={w.contact}
+                    onChange={(e) => setWorker(i, "contact", e.target.value)}
+                    placeholder="연락처 010-0000-0000"
+                    style={{ ...inp, background: T.panel2 }}
+                  />
+                  {w.sig ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <img src={w.sig} alt={`${w.name} 서명`} style={{
+                        height: 34, maxWidth: 90, background: "#FFFFFF10",
+                        border: `1px solid ${T.green}44`, borderRadius: 4, objectFit: "contain",
+                      }} />
+                      <button onClick={() => setWorker(i, "sig", null)} title="서명 다시하기" style={{
+                        background: "none", border: "none", color: T.muted, cursor: "pointer", fontSize: 11,
+                      }}>재서명</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setSigTarget(i)} style={{
+                      background: `${T.cyan}14`, border: `1px solid ${T.cyan}55`, color: T.cyan,
+                      borderRadius: 6, padding: "9px 0", fontSize: 12, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                    }}><PenLine size={13} /> 현장 서명</button>
+                  )}
+                  <button onClick={() => removeWorker(i)} disabled={workers.length === 1} title="행 삭제" style={{
+                    background: "none", border: `1px solid ${T.line}`, borderRadius: 6,
+                    color: workers.length === 1 ? T.line : T.muted, cursor: workers.length === 1 ? "default" : "pointer",
+                    height: 34, display: "flex", alignItems: "center", justifyContent: "center",
+                  }}><X size={14} /></button>
+                </div>
+              ))}
+            </div>
+            <button onClick={addWorker} style={{
+              marginTop: 8, width: "100%", background: "none", border: `1px dashed ${T.line}`,
+              borderRadius: 8, color: T.muted, padding: "11px 0", fontSize: 13, cursor: "pointer",
+            }}>+ 작업자 추가</button>
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 8, lineHeight: 1.5 }}>
+              현장에서 서명하지 못한 작업자는 허가서 등록 후 <b style={{ color: T.amber }}>서명링크</b> 탭에서 각 작업자의 연락처로 전자서명 링크를 발송할 수 있습니다.
+            </div>
+          </div>
+
+          {sigTarget !== null && (
+            <SignaturePad
+              title={workers[sigTarget]?.name || `작업자 ${sigTarget + 1}`}
+              onClose={() => setSigTarget(null)}
+              onSave={(dataUrl) => { setWorker(sigTarget, "sig", dataUrl); setSigTarget(null); }}
+            />
+          )}
+
+          {/* 승인 서명: 인스파이어 책임자 / 담당자 / 공사업체 책임자 */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <PenLine size={15} color={T.amber} />
+              <span style={{ fontSize: 13, fontWeight: 600 }}>승인 서명 <span style={{ color: T.red }}>*</span></span>
+              <span style={{ fontSize: 11, color: T.muted }}>인스파이어 2인 + 공사업체 책임자 서명 필수</span>
+              <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: T.mono, color: T.muted }}>
+                {APPROVAL_ROLES.filter((r) => approvals[r.key].sig).length}/3 서명
+              </span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 10 }}>
+              {APPROVAL_ROLES.map((r) => {
+                const a = approvals[r.key];
+                const inspire = r.key !== "contractor";
+                const accent = inspire ? T.amber : T.cyan;
+                return (
+                  <div key={r.key} style={{
+                    background: T.bg, border: `1px solid ${a.sig ? `${T.green}55` : T.line}`,
+                    borderRadius: 8, padding: 12, display: "flex", flexDirection: "column", gap: 10,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: accent }} />
+                      <span style={{ fontSize: 13, fontWeight: 700 }}>{r.label}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: T.muted, marginTop: -4 }}>{r.hint}</div>
+                    <input
+                      value={a.name}
+                      onChange={(e) => setApproval(r.key, { name: e.target.value })}
+                      placeholder="성명"
+                      style={{ ...inp, background: T.panel2 }}
+                    />
+                    {a.sig ? (
+                      <div style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        background: "#FFFFFF08", border: `1px solid ${T.green}44`, borderRadius: 6, padding: "6px 8px",
+                      }}>
+                        <img src={a.sig} alt={`${r.label} 서명`} style={{ height: 40, maxWidth: "70%", objectFit: "contain" }} />
+                        <button onClick={() => setApproval(r.key, { sig: null })} style={{
+                          background: "none", border: "none", color: T.muted, cursor: "pointer", fontSize: 11,
+                        }}>재서명</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setApprSigTarget(r.key)} style={{
+                        background: `${accent}14`, border: `1px solid ${accent}55`, color: accent,
+                        borderRadius: 6, padding: "11px 0", fontSize: 13, cursor: "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                      }}><PenLine size={14} /> 서명하기</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {apprSigTarget !== null && (
+            <SignaturePad
+              title={APPROVAL_ROLES.find((r) => r.key === apprSigTarget)?.label || "승인자"}
+              onClose={() => setApprSigTarget(null)}
+              onSave={(dataUrl) => { setApproval(apprSigTarget, { sig: dataUrl }); setApprSigTarget(null); }}
+            />
+          )}
+
+          {/* 안전조치 확인 */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <ClipboardCheck size={15} color={T.amber} />
+              <span style={{ fontSize: 13, fontWeight: 600 }}>안전조치 확인사항</span>
+              <span style={{ fontSize: 11, color: T.muted, fontFamily: T.mono }}>{checks.length}/{FORM_CHECKS[formType].length}</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
+              {FORM_CHECKS[formType].map((c) => (
+                <label key={c} style={{
+                  display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px",
+                  background: checks.includes(c) ? `${T.green}10` : T.bg,
+                  border: `1px solid ${checks.includes(c) ? `${T.green}55` : T.line}`,
+                  borderRadius: 6, fontSize: 13, cursor: "pointer", lineHeight: 1.4,
+                }}>
+                  <input type="checkbox" checked={checks.includes(c)} onChange={() => toggle(checks, setChecks, c)}
+                    style={{ accentColor: T.green, marginTop: 2, flexShrink: 0 }} />
+                  {c}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {err && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8, padding: "10px 14px",
+              background: `${T.red}14`, border: `1px solid ${T.red}55`, borderRadius: 6,
+              fontSize: 13, color: T.red,
+            }}>
+              <CircleAlert size={15} /> {err}
+            </div>
+          )}
+
+          <button onClick={submit} style={{
+            background: T.amber, border: "none", borderRadius: 6, padding: "14px 0",
+            fontSize: 15, fontWeight: 700, color: "#111", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          }}>
+            <FilePlus2 size={16} /> 허가서 발급 신청 (승인대기 등록)
+          </button>
+          <div style={{ fontSize: 11, color: T.muted, lineHeight: 1.6 }}>
+            신청 즉시 「작업허가서」 목록에 승인대기 상태로 등록되며, 서명링크 탭에서 책임자 연락처로 전자서명 링크를 발송할 수 있습니다.
+            법적 근거: 산업안전보건법 제38·39조(안전·보건조치), 제63·64조(도급 시 안전보건 확보), 산업안전보건기준에 관한 규칙 제241조의2(화재위험작업)·제619조(밀폐공간 작업 프로그램), KOSHA GUIDE P-94(안전작업허가 지침). 실제 운영 시 사업장 내부 규정에 맞게 항목을 조정하세요.
+          </div>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+/* ───────────────────── 메인 앱 ───────────────────── */
+const NAV = [
+  { key: "overview", label: "종합현황", icon: LayoutDashboard },
+  { key: "permits", label: "허가서", icon: FileCheck2 },
+  { key: "form", label: "작성", icon: FilePlus2 },
+  { key: "alarms", label: "알람", icon: BellRing },
+  { key: "heatmap", label: "히트맵", icon: Grid3X3 },
+  { key: "temp", label: "온도", icon: Thermometer },
+  { key: "sites", label: "현장", icon: MapPin },
+  { key: "sign", label: "서명링크", icon: PenLine },
+];
+const NAV_FULL_LABEL = {
+  overview: "종합현황", permits: "작업허가서", form: "허가서 작성", alarms: "알람이력",
+  heatmap: "위험 히트맵", temp: "온도 실시간", sites: "현장 목록", sign: "서명링크",
+};
+
+function SafetyDashboard() {
+  const isMobile = useIsMobile();
+  const [tab, setTab] = useState("overview");
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [permits, setPermits] = useState(INITIAL_PERMITS);
+  const [sentLinks, setSentLinks] = useState([]);
+  const [preselect, setPreselect] = useState(null);
+  const [toast, setToast] = useState(null);
+  const { data: temp, live: tempLive } = useTempFeed();
+
+  // 데스크톱에서는 에이전트 기본 열림
+  useEffect(() => { if (!isMobile) setAgentOpen(true); }, [isMobile]);
+
+  const sendLink = (permit, targets) => {
+    const list = targets && targets.length
+      ? targets
+      : permitWorkers(permit).filter((w) => !w.signed);
+    if (list.length === 0) return;
+    const time = new Date().toLocaleTimeString("ko-KR", { hour12: false });
+    setSentLinks((prev) => [
+      ...list.map((w) => ({ permitId: permit.id, worker: w.name, contact: w.contact, time })),
+      ...prev,
+    ]);
+    setToast(
+      list.length === 1
+        ? `${list[0].name} (${list[0].contact})에게 서명링크를 전송했습니다.`
+        : `미서명 작업자 ${list.length}명에게 서명링크를 전송했습니다.`
+    );
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const goSign = (permit) => { setPreselect(permit.id); setTab("sign"); };
+
+  const addPermit = (p) => {
+    const num = 17 + permits.filter((x) => x.id.startsWith("WP-2607-0")).length - INITIAL_PERMITS.length;
+    const id = `WP-2607-${String(num).padStart(3, "0")}`;
+    const allSigned = p.workers && p.workers.length > 0 && p.workers.every((w) => w.signed);
+    setPermits((prev) => [{ id, status: "승인대기", signed: allSigned, ...p }, ...prev]);
+    setToast(`${id} 허가서가 승인대기로 등록되었습니다. (작업자 ${p.workers.length}명, 서명 ${p.workers.filter((w) => w.signed).length}명)`);
+    setTimeout(() => setToast(null), 3500);
+    setTab("permits");
+  };
+
+  const content = (
+    <>
+      {tab === "overview" && <Overview permits={permits} temp={temp} />}
+      {tab === "permits" && <Permits permits={permits} onSign={goSign} />}
+      {tab === "form" && <PermitForm onSubmit={addPermit} />}
+      {tab === "alarms" && <AlarmHistory />}
+      {tab === "heatmap" && <Heatmap />}
+      {tab === "temp" && <TempFeed temp={temp} live={tempLive} />}
+      {tab === "sites" && <SiteList />}
+      {tab === "sign" && <SignLink permits={permits} sentLinks={sentLinks} onSend={sendLink} preselect={preselect} />}
+    </>
+  );
+
+  const fontFamily = "'Pretendard', 'Noto Sans KR', -apple-system, 'Segoe UI', sans-serif";
+
+  /* ── 모바일 레이아웃 ── */
+  if (isMobile) {
+    return (
+      <div style={{
+        display: "flex", flexDirection: "column", height: "100vh",
+        background: T.bg, color: T.text, fontFamily, overflow: "hidden",
+      }}>
+        {/* 상단 헤더 */}
+        <div style={{ background: T.panel2, borderBottom: `1px solid ${T.line}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px" }}>
+            <div>
+              <span style={{ fontFamily: T.mono, fontSize: 15, fontWeight: 700 }}>
+                SAFE<span style={{ color: T.amber }}>OPS</span>
+              </span>
+              <span style={{ fontSize: 12, color: T.muted, marginLeft: 10 }}>{NAV_FULL_LABEL[tab]}</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.green, boxShadow: `0 0 6px ${T.green}` }} />
+              <button onClick={() => setAgentOpen(true)} style={{
+                background: `${T.amber}18`, border: `1px solid ${T.amber}55`, color: T.amber,
+                borderRadius: 6, padding: "7px 12px", fontSize: 12, cursor: "pointer",
+                display: "flex", alignItems: "center", gap: 6,
+              }}>
+                <Bot size={14} /> 에이전트
+              </button>
+            </div>
+          </div>
+          <div style={{ height: 4, background: `repeating-linear-gradient(-45deg, ${T.amber} 0 8px, #14181F 8px 16px)` }} />
+        </div>
+
+        {/* 콘텐츠 */}
+        <div style={{ flex: 1, overflowY: "auto", padding: 14, WebkitOverflowScrolling: "touch" }}>
+          {content}
+        </div>
+
+        {/* 하단 탭바 */}
+        <div style={{
+          display: "flex", overflowX: "auto", background: T.panel2,
+          borderTop: `1px solid ${T.line}`, WebkitOverflowScrolling: "touch",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}>
+          {NAV.map(({ key, label, icon: Icon }) => (
+            <button key={key} onClick={() => setTab(key)} style={{
+              flex: "1 0 auto", minWidth: 66, padding: "10px 6px 8px",
+              background: "none", border: "none",
+              borderTop: `2px solid ${tab === key ? T.amber : "transparent"}`,
+              color: tab === key ? T.amber : T.muted, cursor: "pointer",
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+            }}>
+              <Icon size={19} />
+              <span style={{ fontSize: 10 }}>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        <AgentPanel open={agentOpen} onClose={() => setAgentOpen(false)} permits={permits} sentLinks={sentLinks} />
+
+        {toast && (
+          <div style={{
+            position: "fixed", bottom: 88, left: 16, right: 16,
+            background: T.panel, border: `1px solid ${T.green}66`, color: T.text,
+            padding: "12px 16px", borderRadius: 8, fontSize: 13, zIndex: 120,
+            display: "flex", alignItems: "center", gap: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+          }}>
+            <CircleCheck size={16} color={T.green} style={{ flexShrink: 0 }} /> {toast}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* ── 데스크톱 레이아웃 ── */
+  return (
+    <div style={{
+      display: "flex", height: "100vh", background: T.bg, color: T.text,
+      fontFamily, overflow: "hidden",
+    }}>
+      {/* 사이드바 */}
+      <div style={{
+        width: 200, flexShrink: 0, borderRight: `1px solid ${T.line}`, background: T.panel2,
+        display: "flex", flexDirection: "column",
+      }}>
+        <div style={{ padding: "18px 16px 14px" }}>
+          <div style={{ fontFamily: T.mono, fontSize: 15, fontWeight: 700, letterSpacing: "0.04em" }}>
+            SAFE<span style={{ color: T.amber }}>OPS</span>
+          </div>
+          <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>현장 안전관제 시스템</div>
+        </div>
+        <div style={{ height: 5, background: `repeating-linear-gradient(-45deg, ${T.amber} 0 8px, #14181F 8px 16px)` }} />
+        <nav style={{ padding: 10, display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
+          {NAV.map(({ key, icon: Icon }) => (
+            <button key={key} onClick={() => setTab(key)} style={{
+              display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
+              background: tab === key ? `${T.amber}18` : "none",
+              border: "none", borderLeft: `2px solid ${tab === key ? T.amber : "transparent"}`,
+              borderRadius: 4, color: tab === key ? T.text : T.muted,
+              fontSize: 13, cursor: "pointer", textAlign: "left",
+            }}>
+              <Icon size={16} color={tab === key ? T.amber : T.muted} />
+              {NAV_FULL_LABEL[key]}
+            </button>
+          ))}
+        </nav>
+        <button onClick={() => setAgentOpen((v) => !v)} style={{
+          margin: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          padding: "10px 0", background: agentOpen ? `${T.amber}18` : "none",
+          border: `1px solid ${T.amber}55`, borderRadius: 6, color: T.amber, fontSize: 13, cursor: "pointer",
+        }}>
+          <Bot size={15} /> {agentOpen ? "에이전트 닫기" : "에이전트 열기"}
+        </button>
+      </div>
+
+      {/* 메인 */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <div style={{
+          padding: "14px 22px", borderBottom: `1px solid ${T.line}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{NAV_FULL_LABEL[tab]}</div>
+          <div style={{ fontSize: 12, color: T.muted, fontFamily: T.mono, display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.green, boxShadow: `0 0 6px ${T.green}` }} />
+            시스템 정상 · 2026-07-07
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>
+          {content}
+        </div>
+      </div>
+
+      <AgentPanel open={agentOpen} onClose={() => setAgentOpen(false)} permits={permits} sentLinks={sentLinks} />
+
+      {toast && (
+        <div style={{
+          position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+          background: T.panel, border: `1px solid ${T.green}66`, color: T.text,
+          padding: "12px 20px", borderRadius: 8, fontSize: 13, zIndex: 50,
+          display: "flex", alignItems: "center", gap: 8, boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+        }}>
+          <CircleCheck size={16} color={T.green} /> {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const _root = createRoot(document.getElementById("root"));
+_root.render(<SafetyDashboard />);
+const _l = document.getElementById("loading");
+if (_l) _l.remove();
+</script>
+</body>
+</html>
