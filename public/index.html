@@ -89,28 +89,6 @@ const SITES = [
   { id: "MALL", name: "Mall·F&B", manager: "정우진", workers: 27, status: "정상", risk: "낮음" },
 ];
 
-const INITIAL_PERMITS = [
-  { id: "WP-2607-014", type: "화기작업", site: "Arena", location: "Arena 무대 상부 트러스", start: "07-07 08:00", end: "07-07 17:00", status: "진행중", signed: true,
-    worker: "강태호", contact: "010-3421-8876",
-    workers: [{ name: "강태호", contact: "010-3421-8876", signed: true }, { name: "김민재", contact: "010-6631-2087", signed: true }],
-    approvals: { inspireManager: { name: "김현수", sig: null }, inspireStaff: { name: "이안전", sig: null }, contractor: { name: "박시공", sig: null } } },
-  { id: "WP-2607-015", type: "밀폐작업", site: "BOH (주방·후방구역)", location: "BOH 주방 배기덕트 내부", start: "07-07 09:00", end: "07-07 15:00", status: "승인대기", signed: false,
-    worker: "오세라", contact: "010-9982-1123",
-    workers: [{ name: "오세라", contact: "010-9982-1123", signed: false }, { name: "배수진", contact: "010-4470-9915", signed: true }] },
-  { id: "WP-2607-016", type: "고소작업", site: "Rotunda", location: "Rotunda 천장 키네틱 구동부", start: "07-07 10:00", end: "07-07 18:00", status: "승인대기", signed: false,
-    worker: "문준호", contact: "010-5510-4471",
-    workers: [{ name: "문준호", contact: "010-5510-4471", signed: false }, { name: "조현우", contact: "010-8123-5540", signed: false }, { name: "신예린", contact: "010-2290-7761", signed: false }] },
-  { id: "WP-2607-012", type: "일반작업", site: "Casino", location: "Casino 슬롯머신 구역 배선정비", start: "07-06 13:00", end: "07-06 17:00", status: "완료", signed: true,
-    worker: "한지수", contact: "010-7768-2209",
-    workers: [{ name: "한지수", contact: "010-7768-2209", signed: true }] },
-  { id: "WP-2607-013", type: "고소작업", site: "Rotunda", location: "Rotunda 미디어파사드 점검", start: "07-06 08:00", end: "07-07 18:00", status: "진행중", signed: true,
-    worker: "임세빈", contact: "010-2214-9930",
-    workers: [{ name: "임세빈", contact: "010-2214-9930", signed: true }, { name: "황도현", contact: "010-9034-1189", signed: true }] },
-  { id: "WP-2607-011", type: "화기작업", site: "Arena", location: "Arena 백스테이지 용접", start: "07-05 09:00", end: "07-05 12:00", status: "반려", signed: false,
-    worker: "서동혁", contact: "010-8845-6612",
-    workers: [{ name: "서동혁", contact: "010-8845-6612", signed: false }] },
-];
-
 /* 작업자 명단 헬퍼 */
 const permitWorkers = (p) => p.workers || [{ name: p.worker, contact: p.contact, signed: p.signed }];
 const workerLabel = (p) => {
@@ -121,16 +99,6 @@ const signCount = (p) => {
   const w = permitWorkers(p);
   return { done: w.filter((x) => x.signed).length, total: w.length };
 };
-
-const ALARMS = [
-  { id: "AL-3391", time: "07-07 13:42", site: "BOH (주방·후방구역)", type: "가스농도 초과", level: "긴급", msg: "주방덕트 밀폐작업 중 CO 41ppm — 기준치 초과", ack: false },
-  { id: "AL-3390", time: "07-07 12:18", site: "Arena", type: "화기작업 경보", level: "경고", msg: "무대 상부 화기작업 구역 온도 상승 감지", ack: false },
-  { id: "AL-3389", time: "07-07 11:05", site: "Casino", type: "안전모 미착용", level: "주의", msg: "슬롯 구역 정비 중 안전모 미착용 1건 감지", ack: true },
-  { id: "AL-3388", time: "07-07 09:51", site: "Rotunda", type: "고소작업 위험", level: "경고", msg: "키네틱 구동부 교체 중 안전대 미체결 감지", ack: true },
-  { id: "AL-3387", time: "07-06 16:33", site: "Mall·F&B", type: "지게차 접근", level: "주의", msg: "하역구역 지게차-보행자 근접 경고", ack: true },
-  { id: "AL-3386", time: "07-06 14:07", site: "BOH (주방·후방구역)", type: "가스농도 초과", level: "긴급", msg: "덕트 내부 VOC 순간 피크 감지", ack: true },
-  { id: "AL-3385", time: "07-06 10:22", site: "Arena", type: "온도 이상", level: "주의", msg: "조명설비 과열 온도 상승 추세", ack: true },
-];
 
 const HEAT_ROWS = ["Arena", "BOH", "Casino", "Rotunda", "Mall·F&B", "주차·외부"];
 const HEAT_COLS = ["화재", "추락", "질식", "감전", "화학물질"];
@@ -238,44 +206,24 @@ function feelsLike(temp, humidity) {
   return +Math.max(Ta, at).toFixed(1);
 }
 
-/* ───────────────────── 기상청 초단기실황 연동 (영종도) ─────────────────────
+/* ───────────────────── 기상청 초단기실황 연동 (영종도, 서버 프록시) ─────────────────────
    공공데이터포털 기상청_단기예보 조회서비스 > 초단기실황(getUltraSrtNcst)
    영종도(인천 중구) 격자 좌표: nx=55, ny=124
    T1H=기온(℃), REH=습도(%). 매시 정각 관측 → 약 40분 후 제공(10분 주기 갱신).
 
-   ⚠️ 사용법: 아래 KMA_SERVICE_KEY 에 공공데이터포털에서 발급받은
-   "일반 인증키(Encoding)" 를 붙여넣으면 실제 영종도 기온이 연동됩니다.
-   키가 없거나 브라우저 CORS로 호출이 막히면 자동으로 가상 데이터로 대체됩니다.
-   (실서비스에서는 백엔드 프록시를 통해 호출하는 것을 권장)
+   실제 호출은 서버(server/routes/weather.js)에서 수행합니다. 서버 .env의
+   KMA_SERVICE_KEY 가 설정되지 않았거나 기상청 API 호출이 실패하면
+   /api/weather 가 { live: false } 를 반환하고, 이 경우 가상 데이터로 대체됩니다.
 ──────────────────────────────────────────────────── */
-const KMA_SERVICE_KEY = ""; // ← 여기에 공공데이터포털 인증키(Encoding) 입력
-const KMA_NX = 55, KMA_NY = 124; // 영종도(인천 중구)
-
-function kmaBaseDateTime() {
-  const d = new Date();
-  // 실황은 매시 정각 관측, 40분 이후 제공 → 40분 이전이면 한 시간 전 기준
-  if (d.getMinutes() < 40) d.setHours(d.getHours() - 1);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const h = String(d.getHours()).padStart(2, "0");
-  return { base_date: `${y}${m}${day}`, base_time: `${h}00` };
-}
-
 async function fetchYeongjongTemp() {
-  if (!KMA_SERVICE_KEY) return null;
-  const { base_date, base_time } = kmaBaseDateTime();
-  const url =
-    "https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst" +
-    `?serviceKey=${KMA_SERVICE_KEY}&dataType=JSON&numOfRows=10&pageNo=1` +
-    `&base_date=${base_date}&base_time=${base_time}&nx=${KMA_NX}&ny=${KMA_NY}`;
-  const res = await fetch(url);
-  const json = await res.json();
-  const items = json?.response?.body?.items?.item || [];
-  const temp = items.find((x) => x.category === "T1H");
-  const hum = items.find((x) => x.category === "REH");
-  if (!temp) return null;
-  return { temp: parseFloat(temp.obsrValue), humidity: hum ? parseFloat(hum.obsrValue) : 60 };
+  try {
+    const res = await fetch("/api/weather");
+    const json = await res.json();
+    if (!json.live) return null;
+    return { temp: json.temp, humidity: json.humidity };
+  } catch (e) {
+    return null;
+  }
 }
 
 /* ───────────────────── 온도 피드 훅 (외부=기상청 / 내부=가상) ───────────────────── */
@@ -340,7 +288,7 @@ function useTempFeed() {
 }
 
 /* ───────────────────── AI 에이전트 ───────────────────── */
-function AgentPanel({ open, onClose, permits, sentLinks }) {
+function AgentPanel({ open, onClose, permits, alarms, sentLinks }) {
   const isMobile = useIsMobile();
   const [msgs, setMsgs] = useState([
     { role: "assistant", content: "안전관제 에이전트입니다. 작업허가서 현황, 알람 분석, 위험구역 판단, 서명 미완료 건 확인 등 무엇이든 물어보세요." },
@@ -353,38 +301,71 @@ function AgentPanel({ open, onClose, permits, sentLinks }) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [msgs, busy]);
 
-  const context = useMemo(() => JSON.stringify({
+  const context = useMemo(() => ({
     현재시각: new Date().toLocaleString("ko-KR"),
     현장목록: SITES,
     작업허가서: permits,
-    최근알람: ALARMS.slice(0, 6),
+    최근알람: (alarms || []).slice(0, 6),
     위험히트맵: { 구역: HEAT_ROWS, 항목: HEAT_COLS, 점수: HEAT },
     서명링크발송이력: sentLinks,
-  }), [permits, sentLinks]);
+  }), [permits, alarms, sentLinks]);
 
+  // 서버(/api/agent)가 Anthropic API를 대신 호출하고 SSE로 응답을 스트리밍합니다.
+  // 브라우저는 API 키를 알지 못하며, 컨텍스트 주입 프롬프트도 서버에서 구성됩니다.
   const ask = async () => {
     const q = input.trim();
     if (!q || busy) return;
     const history = [...msgs, { role: "user", content: q }];
-    setMsgs(history);
+    setMsgs([...history, { role: "assistant", content: "" }]);
     setInput("");
     setBusy(true);
+
+    const setLastAssistant = (content) => {
+      setMsgs((m) => {
+        const next = [...m];
+        next[next.length - 1] = { role: "assistant", content };
+        return next;
+      });
+    };
+
     try {
-      const apiMessages = history.slice(1).map((m, i) =>
-        i === history.length - 2
-          ? { role: "user", content: `당신은 산업현장 안전관제 대시보드의 전담 AI 에이전트입니다. 아래 대시보드 실시간 데이터를 근거로 한국어로 간결하고 정확하게 답하세요. 데이터에 없는 내용은 추측하지 말고 없다고 말하세요.\n\n[대시보드 데이터]\n${context}\n\n[질문]\n${q}` }
-          : m
-      );
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const apiMessages = history.slice(1); // 첫 안내 메시지(assistant) 제외 — user로 시작
+      const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, messages: apiMessages }),
+        body: JSON.stringify({ messages: apiMessages, context }),
       });
-      const data = await res.json();
-      const text = (data.content || []).map((c) => c.text || "").join("\n").trim() || "응답을 받지 못했습니다. 다시 시도해 주세요.";
-      setMsgs((m) => [...m, { role: "assistant", content: text }]);
+      if (!res.ok || !res.body) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || "요청에 실패했습니다.");
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let text = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop();
+        for (const part of parts) {
+          if (!part.startsWith("data: ")) continue;
+          const payload = part.slice(6);
+          if (payload === "[DONE]") continue;
+          const evt = JSON.parse(payload);
+          if (evt.error) throw new Error(evt.error);
+          if (evt.delta) {
+            text += evt.delta;
+            setLastAssistant(text);
+          }
+        }
+      }
+      if (!text) setLastAssistant("응답을 받지 못했습니다. 다시 시도해 주세요.");
     } catch (e) {
-      setMsgs((m) => [...m, { role: "assistant", content: "네트워크 오류로 답변에 실패했습니다. 잠시 후 다시 시도해 주세요." }]);
+      setLastAssistant(e.message || "네트워크 오류로 답변에 실패했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setBusy(false);
     }
@@ -447,11 +428,11 @@ function AgentPanel({ open, onClose, permits, sentLinks }) {
 }
 
 /* ───────────────────── 각 화면 ───────────────────── */
-function Overview({ permits, temp }) {
+function Overview({ permits, alarms, temp }) {
   const isMobile = useIsMobile();
   const pending = permits.filter((p) => p.status === "승인대기").length;
   const active = permits.filter((p) => p.status === "진행중").length;
-  const unack = ALARMS.filter((a) => !a.ack).length;
+  const unack = alarms.filter((a) => !a.ack).length;
   const lastTemp = temp[temp.length - 1];
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -481,7 +462,7 @@ function Overview({ permits, temp }) {
         </Panel>
         <Panel title="미확인 알람">
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {ALARMS.filter((a) => !a.ack).map((a) => (
+            {alarms.filter((a) => !a.ack).map((a) => (
               <div key={a.id} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
                 <CircleAlert size={16} color={levelColor(a.level)} style={{ marginTop: 2, flexShrink: 0 }} />
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -491,7 +472,7 @@ function Overview({ permits, temp }) {
                 <Badge color={levelColor(a.level)}>{a.level}</Badge>
               </div>
             ))}
-            {ALARMS.filter((a) => !a.ack).length === 0 && <div style={{ color: T.muted, fontSize: 13 }}>모든 알람이 확인되었습니다.</div>}
+            {alarms.filter((a) => !a.ack).length === 0 && <div style={{ color: T.muted, fontSize: 13 }}>모든 알람이 확인되었습니다.</div>}
           </div>
         </Panel>
       </div>
@@ -576,11 +557,11 @@ function Permits({ permits, onSign }) {
   );
 }
 
-function AlarmHistory() {
+function AlarmHistory({ alarms, onAck }) {
   const isMobile = useIsMobile();
   const [filter, setFilter] = useState("전체");
   const levels = ["전체", "긴급", "경고", "주의"];
-  const list = ALARMS.filter((a) => filter === "전체" || a.level === filter);
+  const list = alarms.filter((a) => filter === "전체" || a.level === filter);
   return (
     <Panel
       title="알람 이력"
@@ -618,9 +599,14 @@ function AlarmHistory() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
               <Badge color={levelColor(a.level)}>{a.level}</Badge>
-              <span style={{ fontSize: 11, fontFamily: T.mono, color: a.ack ? T.green : T.red }}>
-                {a.ack ? "확인됨" : "미확인"}
-              </span>
+              {a.ack ? (
+                <span style={{ fontSize: 11, fontFamily: T.mono, color: T.green }}>확인됨</span>
+              ) : (
+                <button onClick={() => onAck(a.id)} style={{
+                  background: `${T.red}14`, border: `1px solid ${T.red}55`, color: T.red,
+                  borderRadius: 4, padding: "4px 10px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap",
+                }}>확인</button>
+              )}
             </div>
           </div>
         ))}
@@ -793,7 +779,7 @@ function TempFeed({ temp, live }) {
           </table>
         </div>
         <div style={{ fontSize: 11, color: T.muted, marginTop: 10, lineHeight: 1.5 }}>
-          외부 온도·습도는 기상청 초단기실황(영종도, 격자 nx=55·ny=124) API로 연동됩니다. 코드 상단 KMA_SERVICE_KEY에 공공데이터포털 인증키를 입력하면 실측값이 표시되며, 키가 없거나 브라우저 보안(CORS)으로 호출이 막히면 자동으로 가상 데이터로 표시됩니다. 실서비스에서는 백엔드 프록시 경유를 권장합니다. 체감온도는 기온·습도로 산정한 추정치입니다.
+          외부 온도·습도는 기상청 초단기실황(영종도, 격자 nx=55·ny=124) API로 연동됩니다. 서버(.env)의 KMA_SERVICE_KEY에 공공데이터포털 인증키를 설정하면 백엔드가 대신 호출하여 실측값이 표시되며, 키가 없거나 호출이 실패하면 자동으로 가상 데이터로 표시됩니다. 체감온도는 기온·습도로 산정한 추정치입니다.
         </div>
       </Panel>
     </div>
@@ -1468,7 +1454,8 @@ function SafetyDashboard() {
   const isMobile = useIsMobile();
   const [tab, setTab] = useState("overview");
   const [agentOpen, setAgentOpen] = useState(false);
-  const [permits, setPermits] = useState(INITIAL_PERMITS);
+  const [permits, setPermits] = useState([]);
+  const [alarms, setAlarms] = useState([]);
   const [sentLinks, setSentLinks] = useState([]);
   const [preselect, setPreselect] = useState(null);
   const [toast, setToast] = useState(null);
@@ -1477,42 +1464,77 @@ function SafetyDashboard() {
   // 데스크톱에서는 에이전트 기본 열림
   useEffect(() => { if (!isMobile) setAgentOpen(true); }, [isMobile]);
 
+  // 초기 로드: 허가서·알람·서명링크 이력을 서버(SQLite)에서 조회
+  useEffect(() => {
+    fetch("/api/permits").then((r) => r.json()).then(setPermits).catch(() => {});
+    fetch("/api/alarms").then((r) => r.json()).then(setAlarms).catch(() => {});
+    fetch("/api/sign-links").then((r) => r.json()).then(setSentLinks).catch(() => {});
+  }, []);
+
+  // 알람 확인(ack) 실시간 반영 — 다른 클라이언트의 확인 처리도 즉시 동기화
+  useEffect(() => {
+    const es = new EventSource("/api/alarms/stream");
+    es.onmessage = (e) => {
+      const updated = JSON.parse(e.data);
+      setAlarms((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+    };
+    return () => es.close();
+  }, []);
+
+  const ackAlarm = (id) => {
+    fetch(`/api/alarms/${id}/ack`, { method: "POST" })
+      .then((r) => r.json())
+      .then((updated) => setAlarms((prev) => prev.map((a) => (a.id === updated.id ? updated : a))))
+      .catch(() => {});
+  };
+
   const sendLink = (permit, targets) => {
     const list = targets && targets.length
       ? targets
       : permitWorkers(permit).filter((w) => !w.signed);
     if (list.length === 0) return;
-    const time = new Date().toLocaleTimeString("ko-KR", { hour12: false });
-    setSentLinks((prev) => [
-      ...list.map((w) => ({ permitId: permit.id, worker: w.name, contact: w.contact, time })),
-      ...prev,
-    ]);
-    setToast(
-      list.length === 1
-        ? `${list[0].name} (${list[0].contact})에게 서명링크를 전송했습니다.`
-        : `미서명 작업자 ${list.length}명에게 서명링크를 전송했습니다.`
-    );
-    setTimeout(() => setToast(null), 3000);
+    Promise.all(
+      list.map((w) =>
+        fetch("/api/sign-links", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ permitId: permit.id, worker: w.name, contact: w.contact }),
+        }).then((r) => r.json())
+      )
+    ).then((sent) => {
+      setSentLinks((prev) => [...sent.reverse(), ...prev]);
+      setToast(
+        list.length === 1
+          ? `${list[0].name} (${list[0].contact})에게 서명링크를 전송했습니다.`
+          : `미서명 작업자 ${list.length}명에게 서명링크를 전송했습니다.`
+      );
+      setTimeout(() => setToast(null), 3000);
+    });
   };
 
   const goSign = (permit) => { setPreselect(permit.id); setTab("sign"); };
 
   const addPermit = (p) => {
-    const num = 17 + permits.filter((x) => x.id.startsWith("WP-2607-0")).length - INITIAL_PERMITS.length;
-    const id = `WP-2607-${String(num).padStart(3, "0")}`;
-    const allSigned = p.workers && p.workers.length > 0 && p.workers.every((w) => w.signed);
-    setPermits((prev) => [{ id, status: "승인대기", signed: allSigned, ...p }, ...prev]);
-    setToast(`${id} 허가서가 승인대기로 등록되었습니다. (작업자 ${p.workers.length}명, 서명 ${p.workers.filter((w) => w.signed).length}명)`);
-    setTimeout(() => setToast(null), 3500);
-    setTab("permits");
+    fetch("/api/permits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+    })
+      .then((r) => r.json())
+      .then((created) => {
+        setPermits((prev) => [created, ...prev]);
+        setToast(`${created.id} 허가서가 승인대기로 등록되었습니다. (작업자 ${p.workers.length}명, 서명 ${p.workers.filter((w) => w.signed).length}명)`);
+        setTimeout(() => setToast(null), 3500);
+        setTab("permits");
+      });
   };
 
   const content = (
     <>
-      {tab === "overview" && <Overview permits={permits} temp={temp} />}
+      {tab === "overview" && <Overview permits={permits} alarms={alarms} temp={temp} />}
       {tab === "permits" && <Permits permits={permits} onSign={goSign} />}
       {tab === "form" && <PermitForm onSubmit={addPermit} />}
-      {tab === "alarms" && <AlarmHistory />}
+      {tab === "alarms" && <AlarmHistory alarms={alarms} onAck={ackAlarm} />}
       {tab === "heatmap" && <Heatmap />}
       {tab === "temp" && <TempFeed temp={temp} live={tempLive} />}
       {tab === "sites" && <SiteList />}
@@ -1577,7 +1599,7 @@ function SafetyDashboard() {
           ))}
         </div>
 
-        <AgentPanel open={agentOpen} onClose={() => setAgentOpen(false)} permits={permits} sentLinks={sentLinks} />
+        <AgentPanel open={agentOpen} onClose={() => setAgentOpen(false)} permits={permits} alarms={alarms} sentLinks={sentLinks} />
 
         {toast && (
           <div style={{
@@ -1651,7 +1673,7 @@ function SafetyDashboard() {
         </div>
       </div>
 
-      <AgentPanel open={agentOpen} onClose={() => setAgentOpen(false)} permits={permits} sentLinks={sentLinks} />
+      <AgentPanel open={agentOpen} onClose={() => setAgentOpen(false)} permits={permits} alarms={alarms} sentLinks={sentLinks} />
 
       {toast && (
         <div style={{
