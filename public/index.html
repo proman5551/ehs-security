@@ -22,6 +22,11 @@
   #loading .bar { width: 160px; height: 3px; border-radius: 2px; background: #1E2836; overflow: hidden; }
   #loading .bar i { display: block; width: 40%; height: 100%; background: #FFB224; animation: slide 1s ease-in-out infinite; }
   @keyframes slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(300%)} }
+  @keyframes safeops-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+  @keyframes safeops-pulse-border { 0%,100%{box-shadow:0 0 0 0 rgba(242,85,90,.5)} 50%{box-shadow:0 0 0 6px rgba(242,85,90,0)} }
+  @media print {
+    .safeops-noprint { display: none !important; }
+  }
 </style>
 <script type="importmap">
 {
@@ -50,22 +55,34 @@ import {
   LayoutDashboard, FileCheck2, BellRing, Grid3X3, Thermometer,
   MapPin, PenLine, Bot, Send, X, CircleAlert, CircleCheck,
   Clock, Link2, MessageSquareText, Radio, FilePlus2, ClipboardCheck,
+  Sun, Moon, BookOpen, ClipboardList, GraduationCap, TriangleAlert,
+  PhoneCall, Building2, Plus, Trash2, Download, Printer, KeyRound,
 } from "lucide-react";
 
-/* ───────────────────── 디자인 토큰 ───────────────────── */
+/* ───────────────────── 디자인 토큰 (라이트/다크) ─────────────────────
+   T는 모듈 스코프 상수 객체지만, applyTheme()이 속성을 in-place로 mutate한다.
+   컴포넌트들은 렌더링 시점에 T.xxx를 직접 읽으므로(React.memo 미사용),
+   테마 전환 시 최상위에서 applyTheme() 후 상태 변경 → 전체 서브트리 리렌더만
+   시켜주면 모든 컴포넌트가 새 색상으로 다시 그려진다. */
+const THEMES = {
+  dark: {
+    bg: "#0A0E13", panel: "#111721", panel2: "#0E141D", line: "#1E2836",
+    text: "#E6EDF5", muted: "#7D8896",
+    amber: "#FFB224", red: "#F2555A", green: "#46C68F", cyan: "#53C7E8",
+  },
+  light: {
+    bg: "#F4F6F8", panel: "#FFFFFF", panel2: "#EEF1F4", line: "#D8DEE5",
+    text: "#101826", muted: "#5B6472",
+    amber: "#B7791F", red: "#D6393F", green: "#1F9D68", cyan: "#0E86A8",
+  },
+};
 const T = {
-  bg: "#0A0E13",
-  panel: "#111721",
-  panel2: "#0E141D",
-  line: "#1E2836",
-  text: "#E6EDF5",
-  muted: "#7D8896",
-  amber: "#FFB224",
-  red: "#F2555A",
-  green: "#46C68F",
-  cyan: "#53C7E8",
+  ...THEMES.dark,
   mono: "'JetBrains Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace",
 };
+function applyTheme(name) {
+  Object.assign(T, THEMES[name] || THEMES.dark);
+}
 
 /* ───────────────────── 반응형 훅 ───────────────────── */
 function useIsMobile() {
@@ -81,12 +98,13 @@ function useIsMobile() {
 }
 
 /* ───────────────────── 샘플 데이터 ───────────────────── */
+// x/y는 도면 이미지 위 위치(%, 좌상단 기준) — 실제 도면 이미지 적용 시 좌표 보정 필요
 const SITES = [
-  { id: "ARN", name: "Arena", manager: "김현수", workers: 24, status: "주의", risk: "높음" },
-  { id: "BOH", name: "BOH (주방·후방구역)", manager: "박지연", workers: 31, status: "경고", risk: "높음" },
-  { id: "CAS", name: "Casino", manager: "이도윤", workers: 42, status: "정상", risk: "중간" },
-  { id: "RTD", name: "Rotunda", manager: "최민아", workers: 18, status: "주의", risk: "중간" },
-  { id: "MALL", name: "Mall·F&B", manager: "정우진", workers: 27, status: "정상", risk: "낮음" },
+  { id: "ARN", name: "Arena", manager: "김현수", workers: 24, status: "주의", risk: "높음", x: 50, y: 22 },
+  { id: "BOH", name: "BOH (주방·후방구역)", manager: "박지연", workers: 31, status: "경고", risk: "높음", x: 80, y: 45 },
+  { id: "CAS", name: "Casino", manager: "이도윤", workers: 42, status: "정상", risk: "중간", x: 50, y: 55 },
+  { id: "RTD", name: "Rotunda", manager: "최민아", workers: 18, status: "주의", risk: "중간", x: 50, y: 78 },
+  { id: "MALL", name: "Mall·F&B", manager: "정우진", workers: 27, status: "정상", risk: "낮음", x: 20, y: 45 },
 ];
 
 /* 작업자 명단 헬퍼 */
@@ -1099,6 +1117,32 @@ function PermitForm({ onSubmit }) {
     contractor: { name: "", sig: null },
   });
   const [apprSigTarget, setApprSigTarget] = useState(null); // 승인 서명패드 대상 key
+  const [raTemplates, setRaTemplates] = useState([]);
+  const [trainingErr, setTrainingErr] = useState(null);
+
+  // 표준 위험성평가 템플릿 — 작업허가서 제출 시 작업유형에 맞춰 자동 별첨
+  useEffect(() => { fetch("/api/risk-assessments").then((r) => r.json()).then(setRaTemplates); }, []);
+
+  // 서명 전 필수 안전교육(공통) 이수 여부 확인 — 미이수 시 현장 서명 차단
+  const openSign = (i) => {
+    setTrainingErr(null);
+    const w = workers[i];
+    if (!w.name.trim() || !w.contact.trim()) {
+      setTrainingErr("서명 전 작업자 성명과 연락처를 먼저 입력하세요.");
+      return;
+    }
+    fetch(`/api/trainings/completions?name=${encodeURIComponent(w.name)}&contact=${encodeURIComponent(w.contact)}`)
+      .then((r) => r.json())
+      .then((rows) => {
+        if (rows.length === 0) {
+          setTrainingErr(`${w.name}님은 필수 안전교육 이수 내역이 없습니다. "교육" 탭에서 먼저 이수해야 서명할 수 있습니다.`);
+          return;
+        }
+        setSigTarget(i);
+      })
+      .catch(() => setSigTarget(i)); // 조회 실패 시(오프라인 등) 서명 자체는 막지 않음
+
+  };
 
   const APPROVAL_ROLES = [
     { key: "inspireManager", label: "인스파이어 책임자", hint: "구역 안전책임자 (발급 승인)" },
@@ -1239,6 +1283,35 @@ function PermitForm({ onSubmit }) {
             </>
           )}
 
+          {/* 표준 위험성평가 자동 별첨 — 선택한 작업유형에 맞춰 자동으로 첨부되어 누락을 방지 */}
+          {(() => {
+            const matched = formType === "hazard"
+              ? raTemplates.filter((t) => kinds.includes(t.workType))
+              : raTemplates.filter((t) => t.workType === "일반작업");
+            if (matched.length === 0) return null;
+            return (
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <ClipboardList size={15} color={T.cyan} />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>자동 별첨된 표준 위험성평가</span>
+                  <Badge color={T.cyan}>자동첨부</Badge>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+                  {matched.map((t) => (
+                    <div key={t.id} style={{ background: T.bg, border: `1px solid ${T.line}`, borderRadius: 8, padding: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: T.cyan, marginBottom: 6 }}>{t.title}</div>
+                      {t.items.map((it, i) => (
+                        <div key={i} style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
+                          <span style={{ color: T.red }}>⚠ {it.hazard}</span> → {it.measure}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* 작업 책임자 */}
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
             <Field label={formType === "rental" ? "행사(작업) 책임자" : "작업 책임자"} required>
@@ -1291,7 +1364,7 @@ function PermitForm({ onSubmit }) {
                       }}>재서명</button>
                     </div>
                   ) : (
-                    <button onClick={() => setSigTarget(i)} style={{
+                    <button onClick={() => openSign(i)} style={{
                       background: `${T.cyan}14`, border: `1px solid ${T.cyan}55`, color: T.cyan,
                       borderRadius: 6, padding: "9px 0", fontSize: 12, cursor: "pointer",
                       display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
@@ -1309,8 +1382,15 @@ function PermitForm({ onSubmit }) {
               marginTop: 8, width: "100%", background: "none", border: `1px dashed ${T.line}`,
               borderRadius: 8, color: T.muted, padding: "11px 0", fontSize: 13, cursor: "pointer",
             }}>+ 작업자 추가</button>
+            {trainingErr && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", marginTop: 8,
+                background: `${T.red}14`, border: `1px solid ${T.red}55`, borderRadius: 6, fontSize: 12, color: T.red,
+              }}><CircleAlert size={14} /> {trainingErr}</div>
+            )}
             <div style={{ fontSize: 11, color: T.muted, marginTop: 8, lineHeight: 1.5 }}>
               현장에서 서명하지 못한 작업자는 허가서 등록 후 <b style={{ color: T.amber }}>서명링크</b> 탭에서 각 작업자의 연락처로 전자서명 링크를 발송할 수 있습니다.
+              서명 전 <b style={{ color: T.amber }}>작업자 교육</b> 탭에서 필수 안전교육 이수가 필요합니다.
             </div>
           </div>
 
@@ -1434,20 +1514,694 @@ function PermitForm({ onSubmit }) {
   );
 }
 
+/* ───────────────────── 테마 토글 ───────────────────── */
+function ThemeToggle({ theme, onToggle }) {
+  return (
+    <button onClick={onToggle} title="라이트/다크 모드 전환" style={{
+      background: "none", border: `1px solid ${T.line}`, color: T.muted, borderRadius: 6,
+      width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
+    }}>
+      {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+    </button>
+  );
+}
+
+/* ───────────────────── 위험수준 신호등 · 작업구역 도면 ───────────────────── */
+function useRiskSignal() {
+  const [signal, setSignal] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    const pull = () => fetch("/api/risk-signal").then((r) => r.json()).then((d) => { if (alive) setSignal(d); }).catch(() => {});
+    pull();
+    const iv = setInterval(pull, 60000);
+    return () => { alive = false; clearInterval(iv); };
+  }, []);
+  return signal;
+}
+
+const riskColor = (level) => (level === "red" ? T.red : level === "yellow" ? T.amber : T.green);
+
+function RiskSignalBanner({ signal }) {
+  if (!signal) return <div style={{ color: T.muted, fontSize: 13 }}>위험수준 신호등을 불러오는 중…</div>;
+  const color = riskColor(signal.level);
+  return (
+    <div style={{
+      background: `${color}12`, border: `1px solid ${color}66`, borderRadius: 10, padding: 16,
+      display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap",
+    }}>
+      <span style={{
+        width: 16, height: 16, borderRadius: "50%", background: color, boxShadow: `0 0 10px ${color}`, flexShrink: 0,
+        animation: signal.level !== "green" ? "safeops-pulse 1.4s ease-in-out infinite" : "none",
+      }} />
+      <div style={{ minWidth: 160 }}>
+        <div style={{ fontSize: 11, color: T.muted, fontFamily: T.mono }}>금일 위험수준 신호등 · {signal.date}</div>
+        <div style={{ fontSize: 22, fontWeight: 700, color }}>{signal.label}</div>
+      </div>
+      <div style={{ fontSize: 12, color: T.text, lineHeight: 1.7, flex: 1, minWidth: 200 }}>
+        {signal.reasons.map((r, i) => <div key={i}>· {r}</div>)}
+      </div>
+    </div>
+  );
+}
+
+// 실제 시설 도면 이미지가 public/assets/floorplan.png 에 준비되면 자동으로 도면+마커 모드로 전환된다.
+// 이미지가 없으면 SITES 카드 그리드에 위험 표시(깜빡임)로 대체된다.
+function FloorPlan({ zones }) {
+  const [imgOk, setImgOk] = useState(true);
+  const hazardBySite = useMemo(() => {
+    const m = {};
+    (zones || []).forEach((z) => { m[z.site] = z.hazardCount; });
+    return m;
+  }, [zones]);
+
+  if (imgOk) {
+    return (
+      <div style={{ position: "relative", width: "100%", borderRadius: 8, overflow: "hidden", background: T.panel2, border: `1px solid ${T.line}` }}>
+        <img
+          src="/assets/floorplan.png"
+          alt="시설 도면"
+          onError={() => setImgOk(false)}
+          style={{ width: "100%", display: "block" }}
+        />
+        {SITES.filter((s) => s.x != null && s.y != null).map((s) => {
+          const active = (hazardBySite[s.name] || 0) > 0;
+          const color = active ? T.red : T.green;
+          return (
+            <div key={s.id} title={`${s.name}${active ? ` · 위험작업 ${hazardBySite[s.name]}건` : ""}`} style={{
+              position: "absolute", left: `${s.x}%`, top: `${s.y}%`, transform: "translate(-50%, -50%)",
+              width: 16, height: 16, borderRadius: "50%", background: color, border: "2px solid #fff",
+              animation: active ? "safeops-pulse 1s ease-in-out infinite" : "none",
+            }} />
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
+        {SITES.map((s) => {
+          const active = (hazardBySite[s.name] || 0) > 0;
+          return (
+            <div key={s.id} style={{
+              background: T.panel, border: `1px solid ${active ? T.red : T.line}`, borderRadius: 8, padding: 12,
+              animation: active ? "safeops-pulse-border 1.2s ease-in-out infinite" : "none",
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{s.name}</div>
+              <div style={{ fontSize: 11, color: active ? T.red : T.muted, marginTop: 4 }}>
+                {active ? `위험작업 ${hazardBySite[s.name]}건 진행 중` : "정상"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11, color: T.muted }}>
+        ※ 실제 시설 도면 이미지를 public/assets/floorplan.png 경로에 배치하면 도면 기반 좌표 표시로 자동 전환됩니다.
+      </div>
+    </div>
+  );
+}
+
+function ZoneHub({ temp, live }) {
+  const isMobile = useIsMobile();
+  const [sub, setSub] = useState("map");
+  const signal = useRiskSignal();
+  const subTabs = [
+    { key: "map", label: "위험신호등 · 도면" },
+    { key: "sites", label: "현장 목록" },
+    { key: "heatmap", label: "히트맵" },
+    { key: "temp", label: "온도" },
+  ];
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {subTabs.map((t) => (
+          <button key={t.key} onClick={() => setSub(t.key)} style={{
+            background: sub === t.key ? `${T.amber}22` : "none",
+            border: `1px solid ${sub === t.key ? T.amber : T.line}`, color: sub === t.key ? T.amber : T.muted,
+            borderRadius: 6, padding: "8px 14px", fontSize: 13, cursor: "pointer",
+          }}>{t.label}</button>
+        ))}
+      </div>
+      {sub === "map" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <RiskSignalBanner signal={signal} />
+          <Panel title="위험구역 표시">
+            <FloorPlan zones={signal?.zones} />
+          </Panel>
+        </div>
+      )}
+      {sub === "sites" && <SiteList />}
+      {sub === "heatmap" && <Heatmap />}
+      {sub === "temp" && <TempFeed temp={temp} live={live} />}
+    </div>
+  );
+}
+
+/* ───────────────────── 규정·지침·절차서 ───────────────────── */
+const DOC_CATEGORIES = ["안전보건관리체계", "비상대응매뉴얼", "기타"];
+
+function Documents() {
+  const isMobile = useIsMobile();
+  const [docs, setDocs] = useState([]);
+  const [filter, setFilter] = useState("전체");
+  const [selected, setSelected] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({ category: DOC_CATEGORIES[0], title: "", content: "" });
+
+  const load = () => fetch("/api/documents").then((r) => r.json()).then(setDocs);
+  useEffect(() => { load(); }, []);
+
+  const list = filter === "전체" ? docs : docs.filter((d) => d.category === filter);
+  const inp = { background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, color: T.text, padding: 8, fontSize: 13, outline: "none" };
+
+  const submit = () => {
+    if (!form.title.trim()) return;
+    fetch("/api/documents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
+      .then((r) => r.json())
+      .then(() => { setForm({ category: DOC_CATEGORIES[0], title: "", content: "" }); setAdding(false); load(); });
+  };
+
+  const remove = (id) => fetch(`/api/documents/${id}`, { method: "DELETE" }).then(() => { setSelected(null); load(); });
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "320px 1fr", gap: 14, alignItems: "start" }}>
+      <Panel title="문서함" right={
+        <button onClick={() => setAdding((v) => !v)} style={{
+          background: "none", border: `1px solid ${T.amber}66`, color: T.amber, borderRadius: 4,
+          padding: "4px 10px", fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4,
+        }}><Plus size={13} /> 문서 등록</button>
+      }>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+          {["전체", ...DOC_CATEGORIES].map((c) => (
+            <button key={c} onClick={() => setFilter(c)} style={{
+              background: filter === c ? `${T.amber}22` : "none",
+              border: `1px solid ${filter === c ? T.amber : T.line}`, color: filter === c ? T.amber : T.muted,
+              borderRadius: 4, padding: "4px 10px", fontSize: 11, cursor: "pointer",
+            }}>{c}</button>
+          ))}
+        </div>
+        {adding && (
+          <div style={{ background: T.bg, border: `1px solid ${T.line}`, borderRadius: 8, padding: 12, marginBottom: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+            <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} style={inp}>
+              {DOC_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="문서 제목" style={inp} />
+            <textarea value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))} placeholder="본문 내용" rows={4} style={{ ...inp, resize: "vertical", fontFamily: "inherit" }} />
+            <button onClick={submit} style={{ background: T.amber, border: "none", borderRadius: 6, padding: "9px 0", fontWeight: 700, cursor: "pointer" }}>등록</button>
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {list.map((d) => (
+            <button key={d.id} onClick={() => setSelected(d)} style={{
+              textAlign: "left", background: selected?.id === d.id ? `${T.amber}14` : T.bg,
+              border: `1px solid ${selected?.id === d.id ? T.amber : T.line}`, borderRadius: 6, padding: 10, cursor: "pointer",
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{d.title}</div>
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{d.category} · {(d.updated_at || "").slice(0, 10)}</div>
+            </button>
+          ))}
+          {list.length === 0 && <div style={{ color: T.muted, fontSize: 13 }}>등록된 문서가 없습니다.</div>}
+        </div>
+      </Panel>
+      <Panel title={selected ? selected.title : "문서 미리보기"} right={selected && (
+        <button onClick={() => remove(selected.id)} style={{ background: "none", border: "none", color: T.red, cursor: "pointer" }}><Trash2 size={15} /></button>
+      )}>
+        {selected
+          ? <div style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.8, color: T.text }}>{selected.content}</div>
+          : <div style={{ color: T.muted, fontSize: 13 }}>왼쪽 목록에서 문서를 선택하세요.</div>}
+      </Panel>
+    </div>
+  );
+}
+
+/* ───────────────────── 위험성평가 표준 툴 ───────────────────── */
+function RiskAssessments() {
+  const isMobile = useIsMobile();
+  const [templates, setTemplates] = useState([]);
+  useEffect(() => { fetch("/api/risk-assessments").then((r) => r.json()).then(setTemplates); }, []);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.6 }}>
+        작업 유형별 표준 위험성평가 툴입니다. 작업허가서(위험작업허가서) 제출 시 선택한 작업 유형에 맞는 항목이 자동으로 별첨되어 누락을 방지합니다.
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(320px, 1fr))", gap: 12 }}>
+        {templates.map((t) => (
+          <Panel key={t.id} title={t.workType} right={<Badge color={T.cyan}>{t.items.length}개 항목</Badge>}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: T.text }}>{t.title}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {t.items.map((it, i) => (
+                <div key={i} style={{ background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, padding: 10 }}>
+                  <div style={{ fontSize: 12, color: T.red }}>⚠ {it.hazard}</div>
+                  <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>→ {it.measure}</div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────── 작업자 교육 ───────────────────── */
+function Training() {
+  const isMobile = useIsMobile();
+  const [trainings, setTrainings] = useState([]);
+  const [active, setActive] = useState(null);
+  const [checked, setChecked] = useState([]);
+  const [worker, setWorker] = useState({ name: "", contact: "" });
+  const [msg, setMsg] = useState(null);
+  const [lookup, setLookup] = useState({ name: "", contact: "", result: null });
+
+  useEffect(() => { fetch("/api/trainings").then((r) => r.json()).then(setTrainings); }, []);
+
+  const inp = { background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, color: T.text, padding: "10px 12px", fontSize: 13, outline: "none" };
+
+  const start = (t) => { setActive(t); setChecked([]); setMsg(null); };
+  const toggleCheck = (idx) => setChecked((c) => (c.includes(idx) ? c.filter((x) => x !== idx) : [...c, idx]));
+
+  const complete = () => {
+    if (!worker.name.trim() || !worker.contact.trim()) return setMsg("이름과 연락처를 입력하세요.");
+    if (checked.length < active.checklist.length) return setMsg("모든 확인 항목에 체크해야 이수 완료됩니다.");
+    fetch(`/api/trainings/${active.id}/complete`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workerName: worker.name, workerContact: worker.contact }),
+    }).then((r) => r.json()).then(() => {
+      setMsg(null);
+      setActive(null); setChecked([]); setWorker({ name: "", contact: "" });
+    });
+  };
+
+  const checkLookup = () => {
+    if (!lookup.name.trim() || !lookup.contact.trim()) return;
+    fetch(`/api/trainings/completions?name=${encodeURIComponent(lookup.name)}&contact=${encodeURIComponent(lookup.contact)}`)
+      .then((r) => r.json()).then((rows) => setLookup((l) => ({ ...l, result: rows })));
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <Panel title="교육 이수 확인 조회">
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input value={lookup.name} onChange={(e) => setLookup((l) => ({ ...l, name: e.target.value }))} placeholder="성명" style={{ ...inp, flex: 1, minWidth: 120 }} />
+          <input value={lookup.contact} onChange={(e) => setLookup((l) => ({ ...l, contact: e.target.value }))} placeholder="연락처" style={{ ...inp, flex: 1, minWidth: 140 }} />
+          <button onClick={checkLookup} style={{ background: T.cyan, border: "none", borderRadius: 6, padding: "10px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>조회</button>
+        </div>
+        {lookup.result && (
+          <div style={{ marginTop: 10, fontSize: 12, display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {lookup.result.length === 0
+              ? <span style={{ color: T.red }}>이수 내역이 없습니다.</span>
+              : lookup.result.map((r, i) => <Badge key={i} color={T.green}>{r.trainingId}</Badge>)}
+          </div>
+        )}
+      </Panel>
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
+        {trainings.map((t) => (
+          <Panel key={t.id} title={t.title} right={<Badge color={T.cyan}>{t.category}</Badge>}>
+            <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6, marginBottom: 10 }}>{t.content}</div>
+            <div style={{ fontSize: 11, color: T.muted, marginBottom: 8 }}>확인 항목 {t.checklist.length}개 · 서류 기반(퀴즈 선택)</div>
+            <button onClick={() => start(t)} style={{
+              width: "100%", background: `${T.amber}18`, border: `1px solid ${T.amber}66`, color: T.amber,
+              borderRadius: 6, padding: "10px 0", fontSize: 13, cursor: "pointer",
+            }}>교육 이수 진행</button>
+          </Panel>
+        ))}
+      </div>
+
+      {active && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 480, background: T.panel, border: `1px solid ${T.line}`, borderRadius: 10, maxHeight: "85vh", overflowY: "auto" }}>
+            <div style={{ padding: 16, borderBottom: `1px solid ${T.line}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>{active.title}</div>
+              <button onClick={() => setActive(null)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><X size={18} /></button>
+            </div>
+            <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6 }}>{active.content}</div>
+              {active.checklist.map((c, i) => (
+                <label key={i} style={{
+                  display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px",
+                  background: checked.includes(i) ? `${T.green}10` : T.bg,
+                  border: `1px solid ${checked.includes(i) ? `${T.green}55` : T.line}`, borderRadius: 6, fontSize: 13, cursor: "pointer",
+                }}>
+                  <input type="checkbox" checked={checked.includes(i)} onChange={() => toggleCheck(i)} style={{ accentColor: T.green, marginTop: 2 }} />
+                  {c}
+                </label>
+              ))}
+              {active.quiz && <div style={{ fontSize: 11, color: T.muted }}>퀴즈는 선택사항입니다.</div>}
+              <input value={worker.name} onChange={(e) => setWorker((w) => ({ ...w, name: e.target.value }))} placeholder="성명" style={inp} />
+              <input value={worker.contact} onChange={(e) => setWorker((w) => ({ ...w, contact: e.target.value }))} placeholder="연락처" style={inp} />
+              {msg && <div style={{ fontSize: 12, color: T.red }}>{msg}</div>}
+              <button onClick={complete} style={{ background: T.green, border: "none", borderRadius: 6, padding: "12px 0", fontWeight: 700, cursor: "pointer", color: "#0B0F14" }}>이수 완료</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ───────────────────── 사고 내역/통계 ───────────────────── */
+const INCIDENT_CATEGORIES = ["임직원", "협력사", "고객"];
+const INCIDENT_GRADES = [
+  { key: "A", label: "A등급 (사망)", desc: "CEO 보고" },
+  { key: "B", label: "B등급 (중상·장애가능)", desc: "ExCo/디렉터급 자동발신" },
+  { key: "C", label: "C등급 (경미)", desc: "내부 관리" },
+];
+const gradeColor = (g) => (g === "A" ? T.red : g === "B" ? T.amber : T.cyan);
+
+function Incidents() {
+  const isMobile = useIsMobile();
+  const [sub, setSub] = useState("register");
+  const [incidents, setIncidents] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [filter, setFilter] = useState({ category: "", grade: "" });
+  const [form, setForm] = useState({ category: INCIDENT_CATEGORIES[0], grade: "C", site: "", type: "", description: "", occurredAt: "", reporter: "" });
+  const [toast, setToast] = useState(null);
+  const [settings, setSettings] = useState([]);
+  const [log, setLog] = useState([]);
+  const [settingForm, setSettingForm] = useState({ grade: "A", department: "", recipientName: "", recipientContact: "", channel: "kakao" });
+
+  const loadList = () => {
+    const qs = new URLSearchParams();
+    if (filter.category) qs.set("category", filter.category);
+    if (filter.grade) qs.set("grade", filter.grade);
+    fetch(`/api/incidents?${qs}`).then((r) => r.json()).then(setIncidents);
+  };
+  useEffect(() => { loadList(); }, [filter.category, filter.grade]);
+  useEffect(() => { fetch("/api/incidents/stats").then((r) => r.json()).then(setStats); }, [incidents]);
+  useEffect(() => {
+    if (sub === "notify") {
+      fetch("/api/notifications/settings").then((r) => r.json()).then(setSettings);
+      fetch("/api/notifications/log").then((r) => r.json()).then(setLog);
+    }
+  }, [sub]);
+
+  const inp = { background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, color: T.text, padding: "10px 12px", fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box" };
+
+  const submit = () => {
+    if (!form.type.trim() || !form.description.trim()) return;
+    fetch("/api/incidents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
+      .then((r) => r.json())
+      .then((created) => {
+        setForm({ category: INCIDENT_CATEGORIES[0], grade: "C", site: "", type: "", description: "", occurredAt: "", reporter: "" });
+        loadList();
+        setToast(
+          created.notified && created.notified.length
+            ? `${created.id} 등록 완료 · ${created.grade}등급 자동알림 ${created.notified.length}건 발송(모의)`
+            : `${created.id} 등록 완료`
+        );
+        setTimeout(() => setToast(null), 4000);
+        setSub("list");
+      });
+  };
+
+  const addSetting = () => {
+    if (!settingForm.department.trim() || !settingForm.recipientName.trim() || !settingForm.recipientContact.trim()) return;
+    fetch("/api/notifications/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settingForm) })
+      .then((r) => r.json())
+      .then(() => {
+        setSettingForm((f) => ({ ...f, department: "", recipientName: "", recipientContact: "" }));
+        fetch("/api/notifications/settings").then((r) => r.json()).then(setSettings);
+      });
+  };
+  const removeSetting = (id) =>
+    fetch(`/api/notifications/settings/${id}`, { method: "DELETE" }).then(() => setSettings((s) => s.filter((x) => x.id !== id)));
+
+  const subTabs = [
+    { key: "register", label: "등록" },
+    { key: "list", label: "목록" },
+    { key: "stats", label: "통계" },
+    { key: "notify", label: "등급별 알림설정" },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {subTabs.map((t) => (
+          <button key={t.key} onClick={() => setSub(t.key)} style={{
+            background: sub === t.key ? `${T.amber}22` : "none",
+            border: `1px solid ${sub === t.key ? T.amber : T.line}`, color: sub === t.key ? T.amber : T.muted,
+            borderRadius: 6, padding: "8px 14px", fontSize: 13, cursor: "pointer",
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {sub === "register" && (
+        <Panel title="사고 등록">
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+            <Field label="구분" required>
+              <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} style={inp}>
+                {INCIDENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
+            <Field label="사고 등급" required>
+              <select value={form.grade} onChange={(e) => setForm((f) => ({ ...f, grade: e.target.value }))} style={inp}>
+                {INCIDENT_GRADES.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}
+              </select>
+            </Field>
+            <Field label="발생 장소"><input value={form.site} onChange={(e) => setForm((f) => ({ ...f, site: e.target.value }))} style={inp} /></Field>
+            <Field label="사고 유형"><input value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))} placeholder="예: 추락, 협착, 화상" style={inp} /></Field>
+            <Field label="발생 일시"><input type="datetime-local" value={form.occurredAt} onChange={(e) => setForm((f) => ({ ...f, occurredAt: e.target.value }))} style={inp} /></Field>
+            <Field label="보고자"><input value={form.reporter} onChange={(e) => setForm((f) => ({ ...f, reporter: e.target.value }))} style={inp} /></Field>
+            <Field label="사고 내용" required span>
+              <textarea rows={3} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} style={{ ...inp, resize: "vertical", fontFamily: "inherit" }} />
+            </Field>
+          </div>
+          <div style={{ fontSize: 11, color: T.muted, marginTop: 10, lineHeight: 1.8 }}>
+            {INCIDENT_GRADES.map((g) => (
+              <div key={g.key}><Badge color={gradeColor(g.key)}>{g.key}</Badge> {g.label} → {g.desc}</div>
+            ))}
+          </div>
+          <button onClick={submit} style={{ marginTop: 14, width: "100%", background: T.amber, border: "none", borderRadius: 6, padding: "13px 0", fontWeight: 700, cursor: "pointer" }}>등록</button>
+        </Panel>
+      )}
+
+      {sub === "list" && (
+        <Panel title="사고 내역" right={
+          <div className="safeops-noprint" style={{ display: "flex", gap: 8 }}>
+            <a href="/api/incidents/export.csv" style={{ background: "none", border: `1px solid ${T.line}`, color: T.muted, borderRadius: 4, padding: "4px 10px", fontSize: 11, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}><Download size={12} /> Excel(CSV)</a>
+            <button onClick={() => window.print()} style={{ background: "none", border: `1px solid ${T.line}`, color: T.muted, borderRadius: 4, padding: "4px 10px", fontSize: 11, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}><Printer size={12} /> PDF/인쇄</button>
+          </div>
+        }>
+          <div className="safeops-noprint" style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+            <select value={filter.category} onChange={(e) => setFilter((f) => ({ ...f, category: e.target.value }))} style={{ ...inp, width: "auto" }}>
+              <option value="">전체 구분</option>
+              {INCIDENT_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={filter.grade} onChange={(e) => setFilter((f) => ({ ...f, grade: e.target.value }))} style={{ ...inp, width: "auto" }}>
+              <option value="">전체 등급</option>
+              {INCIDENT_GRADES.map((g) => <option key={g.key} value={g.key}>{g.key}등급</option>)}
+            </select>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 700 }}>
+              <thead>
+                <tr style={{ color: T.muted, fontFamily: T.mono, fontSize: 11, textAlign: "left" }}>
+                  {["ID", "구분", "등급", "장소", "유형", "발생일시", "상태"].map((h) => <th key={h} style={{ padding: "8px 10px", borderBottom: `1px solid ${T.line}`, fontWeight: 500 }}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {incidents.map((i) => (
+                  <tr key={i.id} style={{ borderBottom: `1px solid ${T.line}` }}>
+                    <td style={{ padding: "10px", fontFamily: T.mono, color: T.cyan }}>{i.id}</td>
+                    <td style={{ padding: "10px" }}>{i.category}</td>
+                    <td style={{ padding: "10px" }}><Badge color={gradeColor(i.grade)}>{i.grade}등급</Badge></td>
+                    <td style={{ padding: "10px", color: T.muted }}>{i.site}</td>
+                    <td style={{ padding: "10px" }}>{i.type}</td>
+                    <td style={{ padding: "10px", fontFamily: T.mono, fontSize: 12, color: T.muted }}>{i.occurred_at || "-"}</td>
+                    <td style={{ padding: "10px" }}>{i.status}</td>
+                  </tr>
+                ))}
+                {incidents.length === 0 && (
+                  <tr><td colSpan={7} style={{ padding: 16, textAlign: "center", color: T.muted }}>등록된 사고 내역이 없습니다.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
+
+      {sub === "stats" && stats && (
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
+          <Panel title="구분별 사고 건수">
+            <div style={{ height: 220 }}>
+              <ResponsiveContainer>
+                <BarChart data={stats.byCategory.map((r) => ({ name: r.category, cnt: r.n }))}>
+                  <CartesianGrid stroke={T.line} vertical={false} />
+                  <XAxis dataKey="name" stroke={T.muted} fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke={T.muted} fontSize={12} tickLine={false} axisLine={false} width={24} allowDecimals={false} />
+                  <Tooltip contentStyle={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, fontSize: 12 }} />
+                  <Bar dataKey="cnt" name="건수" radius={[3, 3, 0, 0]} fill={T.cyan} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+          <Panel title="등급별 사고 건수">
+            <div style={{ height: 220 }}>
+              <ResponsiveContainer>
+                <BarChart data={stats.byGrade.map((r) => ({ name: `${r.grade}등급`, cnt: r.n, grade: r.grade }))}>
+                  <CartesianGrid stroke={T.line} vertical={false} />
+                  <XAxis dataKey="name" stroke={T.muted} fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke={T.muted} fontSize={12} tickLine={false} axisLine={false} width={24} allowDecimals={false} />
+                  <Tooltip contentStyle={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, fontSize: 12 }} />
+                  <Bar dataKey="cnt" name="건수" radius={[3, 3, 0, 0]}>
+                    {stats.byGrade.map((r, i) => <Cell key={i} fill={gradeColor(r.grade)} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+          <Panel title="월별 발생 추이" style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
+            <div style={{ height: 200 }}>
+              <ResponsiveContainer>
+                <BarChart data={stats.byMonth.map((r) => ({ name: r.month, cnt: r.n }))}>
+                  <CartesianGrid stroke={T.line} vertical={false} />
+                  <XAxis dataKey="name" stroke={T.muted} fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke={T.muted} fontSize={12} tickLine={false} axisLine={false} width={24} allowDecimals={false} />
+                  <Tooltip contentStyle={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, fontSize: 12 }} />
+                  <Bar dataKey="cnt" name="건수" radius={[3, 3, 0, 0]} fill={T.amber} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {sub === "notify" && (
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, alignItems: "start" }}>
+          <Panel title="등급별 수신자 설정">
+            <div style={{ fontSize: 11, color: T.muted, marginBottom: 10, lineHeight: 1.6 }}>
+              카카오톡(공용 듀티폰 계정) 또는 CCC 문자 연동은 CCC·IT 협의 후 실제 발송으로 전환됩니다. 현재는 등록된 수신자에게 모의 발송 기록만 남습니다.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+              {settings.map((s) => (
+                <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, padding: "8px 10px", fontSize: 12, flexWrap: "wrap" }}>
+                  <Badge color={gradeColor(s.grade)}>{s.grade}등급</Badge>
+                  <span style={{ fontWeight: 600 }}>{s.department}</span>
+                  <span style={{ color: T.muted }}>{s.recipient_name} · {s.recipient_contact}</span>
+                  <span style={{ marginLeft: "auto", fontFamily: T.mono, fontSize: 11, color: T.muted }}>{s.channel === "kakao" ? "카카오톡" : "CCC 문자"}</span>
+                  <button onClick={() => removeSetting(s.id)} style={{ background: "none", border: "none", color: T.red, cursor: "pointer" }}><Trash2 size={14} /></button>
+                </div>
+              ))}
+              {settings.length === 0 && <div style={{ color: T.muted, fontSize: 13 }}>등록된 수신자가 없습니다.</div>}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "80px 1fr", gap: 8 }}>
+              <select value={settingForm.grade} onChange={(e) => setSettingForm((f) => ({ ...f, grade: e.target.value }))} style={inp}>
+                {["A", "B", "C"].map((g) => <option key={g} value={g}>{g}등급</option>)}
+              </select>
+              <input value={settingForm.department} onChange={(e) => setSettingForm((f) => ({ ...f, department: e.target.value }))} placeholder="부서(예: 홍보팀)" style={inp} />
+              <input value={settingForm.recipientName} onChange={(e) => setSettingForm((f) => ({ ...f, recipientName: e.target.value }))} placeholder="수신자 성명" style={{ ...inp, gridColumn: "1 / -1" }} />
+              <input value={settingForm.recipientContact} onChange={(e) => setSettingForm((f) => ({ ...f, recipientContact: e.target.value }))} placeholder="연락처" style={{ ...inp, gridColumn: "1 / -1" }} />
+              <select value={settingForm.channel} onChange={(e) => setSettingForm((f) => ({ ...f, channel: e.target.value }))} style={{ ...inp, gridColumn: "1 / -1" }}>
+                <option value="kakao">카카오톡(듀티폰)</option>
+                <option value="ccc_sms">CCC 문자</option>
+              </select>
+              <button onClick={addSetting} style={{ gridColumn: "1 / -1", background: T.amber, border: "none", borderRadius: 6, padding: "10px 0", fontWeight: 700, cursor: "pointer" }}>수신자 추가</button>
+            </div>
+          </Panel>
+          <Panel title="모의 발송 이력">
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {log.map((l) => (
+                <div key={l.id} style={{ background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, padding: "8px 10px", fontSize: 12 }}>
+                  <div><Badge color={gradeColor(l.grade)}>{l.grade}등급</Badge> <span style={{ fontFamily: T.mono, color: T.cyan, marginLeft: 6 }}>{l.incidentId}</span></div>
+                  <div style={{ color: T.muted, marginTop: 4 }}>{l.recipients.map((r) => r.recipient_name).join(", ")} · {l.sentAt}</div>
+                </div>
+              ))}
+              {log.length === 0 && <div style={{ color: T.muted, fontSize: 13 }}>발송 이력이 없습니다.</div>}
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{ background: T.panel, border: `1px solid ${T.green}66`, borderRadius: 8, padding: "12px 16px", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
+          <CircleCheck size={16} color={T.green} /> {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ───────────────────── 비상연락망 ───────────────────── */
+function EmergencyContacts() {
+  const isMobile = useIsMobile();
+  const [contacts, setContacts] = useState([]);
+  const [form, setForm] = useState({ name: "", role: "", phone: "", category: "사내" });
+  const load = () => fetch("/api/emergency-contacts").then((r) => r.json()).then(setContacts);
+  useEffect(() => { load(); }, []);
+
+  const grouped = useMemo(() => {
+    const m = {};
+    contacts.forEach((c) => { (m[c.category] = m[c.category] || []).push(c); });
+    return m;
+  }, [contacts]);
+
+  const inp = { background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, color: T.text, padding: "10px 12px", fontSize: 13, outline: "none" };
+
+  const submit = () => {
+    if (!form.name.trim() || !form.phone.trim()) return;
+    fetch("/api/emergency-contacts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
+      .then((r) => r.json())
+      .then(() => { setForm({ name: "", role: "", phone: "", category: "사내" }); load(); });
+  };
+  const remove = (id) => fetch(`/api/emergency-contacts/${id}`, { method: "DELETE" }).then(load);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <Panel title="연락처 추가">
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr 120px 90px", gap: 8 }}>
+          <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="명칭(예: 소방서)" style={inp} />
+          <input value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} placeholder="역할" style={inp} />
+          <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="연락처" style={inp} />
+          <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} style={inp}>
+            {["사내", "외부기관", "의료기관"].map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <button onClick={submit} style={{ background: T.amber, border: "none", borderRadius: 6, fontWeight: 700, cursor: "pointer" }}>추가</button>
+        </div>
+      </Panel>
+      {Object.entries(grouped).map(([cat, list]) => (
+        <Panel key={cat} title={cat}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {list.map((c) => (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, padding: "10px 12px", flexWrap: "wrap" }}>
+                <PhoneCall size={15} color={T.cyan} />
+                <div style={{ flex: 1, minWidth: 100 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{c.name}</div>
+                  {c.role && <div style={{ fontSize: 11, color: T.muted }}>{c.role}</div>}
+                </div>
+                <a href={`tel:${c.phone}`} style={{ fontFamily: T.mono, color: T.amber, fontSize: 13, textDecoration: "none" }}>{c.phone}</a>
+                <button onClick={() => remove(c.id)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Trash2 size={14} /></button>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ))}
+      {contacts.length === 0 && <div style={{ color: T.muted, fontSize: 13 }}>등록된 비상연락처가 없습니다.</div>}
+    </div>
+  );
+}
+
 /* ───────────────────── 메인 앱 ───────────────────── */
 const NAV = [
   { key: "overview", label: "종합현황", icon: LayoutDashboard },
+  { key: "zone", label: "작업구역", icon: Building2 },
   { key: "permits", label: "허가서", icon: FileCheck2 },
   { key: "form", label: "작성", icon: FilePlus2 },
-  { key: "alarms", label: "알람", icon: BellRing },
-  { key: "heatmap", label: "히트맵", icon: Grid3X3 },
-  { key: "temp", label: "온도", icon: Thermometer },
-  { key: "sites", label: "현장", icon: MapPin },
   { key: "sign", label: "서명링크", icon: PenLine },
+  { key: "riskassess", label: "위험성평가", icon: ClipboardList },
+  { key: "training", label: "교육", icon: GraduationCap },
+  { key: "docs", label: "규정지침", icon: BookOpen },
+  { key: "incidents", label: "사고내역", icon: TriangleAlert },
+  { key: "contacts", label: "비상연락망", icon: PhoneCall },
+  { key: "alarms", label: "알람", icon: BellRing },
 ];
 const NAV_FULL_LABEL = {
-  overview: "종합현황", permits: "작업허가서", form: "허가서 작성", alarms: "알람이력",
-  heatmap: "위험 히트맵", temp: "온도 실시간", sites: "현장 목록", sign: "서명링크",
+  overview: "종합현황", zone: "작업구역", permits: "작업허가서", form: "허가서 작성", sign: "서명링크",
+  riskassess: "위험성평가", training: "작업자 교육", docs: "규정·지침·절차서", incidents: "사고 내역/통계",
+  contacts: "비상연락망", alarms: "알람이력",
 };
 
 function SafetyDashboard() {
@@ -1459,7 +2213,16 @@ function SafetyDashboard() {
   const [sentLinks, setSentLinks] = useState([]);
   const [preselect, setPreselect] = useState(null);
   const [toast, setToast] = useState(null);
+  const [theme, setTheme] = useState(() => (typeof localStorage !== "undefined" && localStorage.getItem("safeops-theme")) || "dark");
   const { data: temp, live: tempLive } = useTempFeed();
+
+  // 렌더링 전 T 토큰을 현재 테마 색상으로 in-place 갱신 — 모든 하위 컴포넌트가
+  // 이번 렌더에서 새 색상을 읽는다 (React.memo 미사용이므로 부모 리렌더 시 전체 재실행됨).
+  applyTheme(theme);
+  useEffect(() => {
+    try { localStorage.setItem("safeops-theme", theme); } catch (e) {}
+  }, [theme]);
+  const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
 
   // 데스크톱에서는 에이전트 기본 열림
   useEffect(() => { if (!isMobile) setAgentOpen(true); }, [isMobile]);
@@ -1532,13 +2295,16 @@ function SafetyDashboard() {
   const content = (
     <>
       {tab === "overview" && <Overview permits={permits} alarms={alarms} temp={temp} />}
+      {tab === "zone" && <ZoneHub temp={temp} live={tempLive} />}
       {tab === "permits" && <Permits permits={permits} onSign={goSign} />}
       {tab === "form" && <PermitForm onSubmit={addPermit} />}
-      {tab === "alarms" && <AlarmHistory alarms={alarms} onAck={ackAlarm} />}
-      {tab === "heatmap" && <Heatmap />}
-      {tab === "temp" && <TempFeed temp={temp} live={tempLive} />}
-      {tab === "sites" && <SiteList />}
       {tab === "sign" && <SignLink permits={permits} sentLinks={sentLinks} onSend={sendLink} preselect={preselect} />}
+      {tab === "riskassess" && <RiskAssessments />}
+      {tab === "training" && <Training />}
+      {tab === "docs" && <Documents />}
+      {tab === "incidents" && <Incidents />}
+      {tab === "contacts" && <EmergencyContacts />}
+      {tab === "alarms" && <AlarmHistory alarms={alarms} onAck={ackAlarm} />}
     </>
   );
 
@@ -1560,8 +2326,9 @@ function SafetyDashboard() {
               </span>
               <span style={{ fontSize: 12, color: T.muted, marginLeft: 10 }}>{NAV_FULL_LABEL[tab]}</span>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.green, boxShadow: `0 0 6px ${T.green}` }} />
+              <ThemeToggle theme={theme} onToggle={toggleTheme} />
               <button onClick={() => setAgentOpen(true)} style={{
                 background: `${T.amber}18`, border: `1px solid ${T.amber}55`, color: T.amber,
                 borderRadius: 6, padding: "7px 12px", fontSize: 12, cursor: "pointer",
@@ -1663,9 +2430,12 @@ function SafetyDashboard() {
           display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{NAV_FULL_LABEL[tab]}</div>
-          <div style={{ fontSize: 12, color: T.muted, fontFamily: T.mono, display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.green, boxShadow: `0 0 6px ${T.green}` }} />
-            시스템 정상 · 2026-07-07
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ fontSize: 12, color: T.muted, fontFamily: T.mono, display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.green, boxShadow: `0 0 6px ${T.green}` }} />
+              시스템 정상
+            </div>
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
           </div>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: 20 }}>

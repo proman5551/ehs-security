@@ -9,6 +9,13 @@ const permitsRouter = require("./routes/permits");
 const alarmsRouter = require("./routes/alarms");
 const signLinksRouter = require("./routes/signlinks");
 const weatherRouter = require("./routes/weather");
+const documentsRouter = require("./routes/documents");
+const riskAssessmentsRouter = require("./routes/riskAssessments");
+const trainingsRouter = require("./routes/trainings");
+const incidentsRouter = require("./routes/incidents");
+const emergencyContactsRouter = require("./routes/emergencyContacts");
+const notificationsRouter = require("./routes/notifications");
+const riskSignalRouter = require("./routes/riskSignal");
 
 const db = initDb();
 
@@ -22,6 +29,13 @@ app.use("/api/permits", permitsRouter);
 app.use("/api/alarms", alarmsRouter);
 app.use("/api/sign-links", signLinksRouter);
 app.use("/api/weather", weatherRouter);
+app.use("/api/documents", documentsRouter);
+app.use("/api/risk-assessments", riskAssessmentsRouter);
+app.use("/api/trainings", trainingsRouter);
+app.use("/api/incidents", incidentsRouter);
+app.use("/api/emergency-contacts", emergencyContactsRouter);
+app.use("/api/notifications", notificationsRouter);
+app.use("/api/risk-signal", riskSignalRouter);
 
 app.use(express.static(path.join(__dirname, "..", "public")));
 
