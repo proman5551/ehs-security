@@ -57,6 +57,7 @@ import {
   Clock, Link2, MessageSquareText, Radio, FilePlus2, ClipboardCheck,
   Sun, Moon, BookOpen, ClipboardList, GraduationCap, TriangleAlert,
   PhoneCall, Building2, Plus, Trash2, Download, Printer, KeyRound,
+  User, Pencil,
 } from "lucide-react";
 
 /* ───────────────────── 디자인 토큰 (라이트/다크) ─────────────────────
@@ -2184,6 +2185,161 @@ function EmergencyContacts() {
   );
 }
 
+/* ───────────────────── 마이페이지 ─────────────────────
+   별도 로그인 시스템이 아직 없어, 브라우저 localStorage에 저장된 프로필(이름·연락처)로
+   본인 확인을 대신하고, 기존 API에서 해당 이름/연락처로 필터링해 개인화된 뷰를 만든다. */
+const PROFILE_KEY = "safeops-profile";
+function loadProfile() {
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY);
+    return raw ? JSON.parse(raw) : { name: "", department: "", role: "", contact: "" };
+  } catch (e) {
+    return { name: "", department: "", role: "", contact: "" };
+  }
+}
+
+function MyPage({ theme, onToggleTheme }) {
+  const isMobile = useIsMobile();
+  const [profile, setProfile] = useState(loadProfile);
+  const [editing, setEditing] = useState(() => !loadProfile().name);
+  const [draft, setDraft] = useState(profile);
+  const [completions, setCompletions] = useState(null);
+  const [myPermits, setMyPermits] = useState([]);
+  const [myLinks, setMyLinks] = useState([]);
+
+  const hasIdentity = !!(profile.name.trim() && profile.contact.trim());
+  const inp = { background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, color: T.text, padding: "10px 12px", fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box" };
+
+  useEffect(() => {
+    if (!hasIdentity) return;
+    fetch(`/api/trainings/completions?name=${encodeURIComponent(profile.name)}&contact=${encodeURIComponent(profile.contact)}`)
+      .then((r) => r.json()).then(setCompletions).catch(() => setCompletions([]));
+    fetch("/api/permits").then((r) => r.json()).then((all) => {
+      setMyPermits(all.filter((p) =>
+        p.worker === profile.name ||
+        permitWorkers(p).some((w) => w.name === profile.name && w.contact === profile.contact)
+      ));
+    }).catch(() => {});
+    fetch("/api/sign-links").then((r) => r.json()).then((all) => {
+      setMyLinks(all.filter((l) => l.contact === profile.contact));
+    }).catch(() => {});
+  }, [hasIdentity, profile.name, profile.contact]);
+
+  const save = () => {
+    if (!draft.name.trim() || !draft.contact.trim()) return;
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(draft));
+    setProfile(draft);
+    setEditing(false);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 760 }}>
+      <Panel title="내 프로필" right={!editing && (
+        <button onClick={() => { setDraft(profile); setEditing(true); }} style={{
+          background: "none", border: `1px solid ${T.line}`, color: T.muted, borderRadius: 4,
+          padding: "4px 10px", fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4,
+        }}><Pencil size={12} /> 수정</button>
+      )}>
+        {editing ? (
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+            <Field label="성명" required><input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} style={inp} /></Field>
+            <Field label="연락처" required><input value={draft.contact} onChange={(e) => setDraft((d) => ({ ...d, contact: e.target.value }))} placeholder="010-0000-0000" style={inp} /></Field>
+            <Field label="소속(부서/업체)"><input value={draft.department} onChange={(e) => setDraft((d) => ({ ...d, department: e.target.value }))} style={inp} /></Field>
+            <Field label="직책/역할"><input value={draft.role} onChange={(e) => setDraft((d) => ({ ...d, role: e.target.value }))} style={inp} /></Field>
+            <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
+              <button onClick={save} style={{ flex: 1, background: T.amber, border: "none", borderRadius: 6, padding: "11px 0", fontWeight: 700, cursor: "pointer" }}>저장</button>
+              {profile.name && (
+                <button onClick={() => setEditing(false)} style={{ background: "none", border: `1px solid ${T.line}`, color: T.muted, borderRadius: 6, padding: "11px 16px", cursor: "pointer" }}>취소</button>
+              )}
+            </div>
+            <div style={{ gridColumn: "1 / -1", fontSize: 11, color: T.muted, lineHeight: 1.5 }}>
+              이 정보는 로그인 없이 이 브라우저에만 저장되며, 작업허가서·교육 이수 조회 시 본인 확인 용도로 사용됩니다. (별도 계정 시스템은 아직 없습니다)
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: "50%", background: `${T.amber}18`, border: `1px solid ${T.amber}55`,
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            }}><User size={22} color={T.amber} /></div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{profile.name}</div>
+              <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+                {[profile.department, profile.role].filter(Boolean).join(" · ") || "소속 미입력"} · {profile.contact}
+              </div>
+            </div>
+          </div>
+        )}
+      </Panel>
+
+      {hasIdentity && !editing && (
+        <>
+          <Panel title="화면 설정">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>다크/라이트 모드</div>
+                <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>현재: {theme === "dark" ? "다크 모드" : "라이트 모드"}</div>
+              </div>
+              <button onClick={onToggleTheme} style={{
+                background: T.bg, border: `1px solid ${T.line}`, color: T.text, borderRadius: 6,
+                padding: "8px 14px", fontSize: 13, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+              }}>{theme === "dark" ? <><Sun size={14} /> 라이트로 전환</> : <><Moon size={14} /> 다크로 전환</>}</button>
+            </div>
+          </Panel>
+
+          <Panel title="내 안전교육 이수 현황" right={<Badge color={T.cyan}>{completions ? completions.length : "-"}건</Badge>}>
+            {completions === null ? (
+              <div style={{ color: T.muted, fontSize: 13 }}>불러오는 중…</div>
+            ) : completions.length === 0 ? (
+              <div style={{ color: T.red, fontSize: 13 }}>이수한 교육이 없습니다. <b style={{ color: T.amber }}>작업자 교육</b> 탭에서 이수해 주세요.</div>
+            ) : (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {completions.map((c, i) => (
+                  <Badge key={i} color={T.green}>{c.trainingId} · {(c.completedAt || "").slice(0, 10)}</Badge>
+                ))}
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="내가 등재된 작업허가서" right={<Badge color={T.cyan}>{myPermits.length}건</Badge>}>
+            {myPermits.length === 0 ? (
+              <div style={{ color: T.muted, fontSize: 13 }}>등재된 작업허가서가 없습니다.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {myPermits.map((p) => (
+                  <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, padding: "10px 12px", flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: T.mono, fontSize: 12, color: T.cyan }}>{p.id}</span>
+                    <span style={{ fontSize: 13 }}>{p.type}</span>
+                    <span style={{ fontSize: 12, color: T.muted }}>{p.site}</span>
+                    <Badge color={statusColor(p.status)}>{p.status}</Badge>
+                    <span style={{ marginLeft: "auto", fontSize: 11, fontFamily: T.mono, color: T.muted }}>{p.start} ~ {p.end}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="나에게 발송된 서명링크" right={<Badge color={T.cyan}>{myLinks.length}건</Badge>}>
+            {myLinks.length === 0 ? (
+              <div style={{ color: T.muted, fontSize: 13 }}>발송된 서명링크가 없습니다.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {myLinks.map((l, i) => (
+                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13, padding: "8px 2px", borderBottom: `1px solid ${T.line}` }}>
+                    <CircleCheck size={14} color={T.green} />
+                    <span style={{ fontFamily: T.mono, color: T.cyan }}>{l.permitId}</span>
+                    <span style={{ marginLeft: "auto", fontFamily: T.mono, fontSize: 11, color: T.muted }}>{l.time}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ───────────────────── 메인 앱 ───────────────────── */
 const NAV = [
   { key: "overview", label: "종합현황", icon: LayoutDashboard },
@@ -2201,7 +2357,7 @@ const NAV = [
 const NAV_FULL_LABEL = {
   overview: "종합현황", zone: "작업구역", permits: "작업허가서", form: "허가서 작성", sign: "서명링크",
   riskassess: "위험성평가", training: "작업자 교육", docs: "규정·지침·절차서", incidents: "사고 내역/통계",
-  contacts: "비상연락망", alarms: "알람이력",
+  contacts: "비상연락망", alarms: "알람이력", mypage: "마이페이지",
 };
 
 function SafetyDashboard() {
@@ -2305,6 +2461,7 @@ function SafetyDashboard() {
       {tab === "incidents" && <Incidents />}
       {tab === "contacts" && <EmergencyContacts />}
       {tab === "alarms" && <AlarmHistory alarms={alarms} onAck={ackAlarm} />}
+      {tab === "mypage" && <MyPage theme={theme} onToggleTheme={toggleTheme} />}
     </>
   );
 
@@ -2328,6 +2485,11 @@ function SafetyDashboard() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.green, boxShadow: `0 0 6px ${T.green}` }} />
+              <button onClick={() => setTab("mypage")} title="마이페이지" style={{
+                background: tab === "mypage" ? `${T.amber}18` : "none", border: `1px solid ${tab === "mypage" ? T.amber : T.line}`,
+                color: tab === "mypage" ? T.amber : T.muted, borderRadius: 6, width: 34, height: 34,
+                display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
+              }}><User size={16} /></button>
               <ThemeToggle theme={theme} onToggle={toggleTheme} />
               <button onClick={() => setAgentOpen(true)} style={{
                 background: `${T.amber}18`, border: `1px solid ${T.amber}55`, color: T.amber,
@@ -2435,6 +2597,11 @@ function SafetyDashboard() {
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.green, boxShadow: `0 0 6px ${T.green}` }} />
               시스템 정상
             </div>
+            <button onClick={() => setTab("mypage")} title="마이페이지" style={{
+              background: tab === "mypage" ? `${T.amber}18` : "none", border: `1px solid ${tab === "mypage" ? T.amber : T.line}`,
+              color: tab === "mypage" ? T.amber : T.muted, borderRadius: 6, width: 34, height: 34,
+              display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
+            }}><User size={16} /></button>
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
           </div>
         </div>
