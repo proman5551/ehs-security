@@ -1,6 +1,11 @@
 const express = require("express");
+const { requireAuth, requireRole } = require("../lib/auth");
 
 const router = express.Router();
+const CAN_EDIT = ["시스템 어드민", "슈퍼 EHS", "EHS"];
+const CAN_ISSUE = ["시스템 어드민", "슈퍼 EHS", "EHS", "Security"];
+
+router.use(requireAuth);
 
 function rowToTraining(row) {
   return {
@@ -20,7 +25,7 @@ router.get("/", (req, res) => {
   res.json(rows.map(rowToTraining));
 });
 
-router.post("/", (req, res) => {
+router.post("/", requireRole(...CAN_EDIT), (req, res) => {
   const db = req.app.locals.db;
   const { title, category, content, checklist, quiz } = req.body || {};
   if (!title || !Array.isArray(checklist) || checklist.length === 0) {
@@ -46,7 +51,7 @@ router.get("/completions", (req, res) => {
   res.json(rows.map((r) => ({ trainingId: r.training_id, completedAt: r.completed_at })));
 });
 
-router.post("/:id/complete", (req, res) => {
+router.post("/:id/complete", requireRole(...CAN_ISSUE), (req, res) => {
   const db = req.app.locals.db;
   const { id } = req.params;
   const training = db.prepare("SELECT * FROM trainings WHERE id = ?").get(id);

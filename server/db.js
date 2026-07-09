@@ -1,7 +1,12 @@
 const path = require("path");
+const crypto = require("crypto");
 const Database = require("better-sqlite3");
+const bcrypt = require("bcryptjs");
 
 const DB_PATH = path.join(__dirname, "..", "safeops.db");
+
+// 5종 계정 권한 — server/lib/auth.js의 requireRole()에서 참조하는 것과 동일한 값이어야 한다.
+const ROLES = ["시스템 어드민", "슈퍼 EHS", "EHS", "Security", "기타 임직원"];
 
 const INITIAL_PERMITS = [
   { id: "WP-2607-014", type: "화기작업", site: "Arena", location: "Arena 무대 상부 트러스", start: "07-07 08:00", end: "07-07 17:00", status: "진행중", signed: true,
@@ -131,7 +136,26 @@ function initDb() {
       workers_json TEXT NOT NULL DEFAULT '[]',
       approvals_json TEXT,
       detail_json TEXT,
+      created_by_user_id INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      name TEXT NOT NULL,
+      department TEXT,
+      contact TEXT,
+      role TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      token TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS alarms (
@@ -323,7 +347,29 @@ function initDb() {
     insertMany(NOTIFICATION_SETTINGS);
   }
 
+  const userCount = db.prepare("SELECT COUNT(*) AS n FROM users").get().n;
+  if (userCount === 0) {
+    const password = process.env.ADMIN_INITIAL_PASSWORD || crypto.randomBytes(9).toString("base64url");
+    const hash = bcrypt.hashSync(password, 10);
+    db.prepare(`
+      INSERT INTO users (username, password_hash, name, department, contact, role)
+      VALUES ('admin', ?, '시스템 관리자', 'IT', '', '시스템 어드민')
+    `).run(hash);
+
+    if (!process.env.ADMIN_INITIAL_PASSWORD) {
+      console.log("");
+      console.log("========================================================");
+      console.log(" 최초 시스템 어드민 계정이 생성되었습니다.");
+      console.log(`   아이디: admin`);
+      console.log(`   비밀번호: ${password}`);
+      console.log(" 이 비밀번호는 다시 표시되지 않습니다 — 로그인 후 반드시 변경하세요.");
+      console.log(" (.env의 ADMIN_INITIAL_PASSWORD로 직접 지정할 수도 있습니다)");
+      console.log("========================================================");
+      console.log("");
+    }
+  }
+
   return db;
 }
 
-module.exports = { initDb };
+module.exports = { initDb, ROLES };

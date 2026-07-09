@@ -1,6 +1,10 @@
 const express = require("express");
+const { requireAuth, requireRole } = require("../lib/auth");
 
 const router = express.Router();
+const CAN_EDIT = ["시스템 어드민", "슈퍼 EHS", "EHS"];
+
+router.use(requireAuth);
 
 function nextDocId(db) {
   const rows = db.prepare("SELECT id FROM documents WHERE id LIKE 'DOC-%'").all();
@@ -18,7 +22,7 @@ router.get("/", (req, res) => {
   res.json(rows);
 });
 
-router.post("/", (req, res) => {
+router.post("/", requireRole(...CAN_EDIT), (req, res) => {
   const db = req.app.locals.db;
   const { category, title, content } = req.body || {};
   if (!category || !title) {
@@ -31,7 +35,7 @@ router.post("/", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM documents WHERE id = ?").get(id));
 });
 
-router.put("/:id", (req, res) => {
+router.put("/:id", requireRole(...CAN_EDIT), (req, res) => {
   const db = req.app.locals.db;
   const { id } = req.params;
   const row = db.prepare("SELECT * FROM documents WHERE id = ?").get(id);
@@ -45,7 +49,7 @@ router.put("/:id", (req, res) => {
   res.json(db.prepare("SELECT * FROM documents WHERE id = ?").get(id));
 });
 
-router.delete("/:id", (req, res) => {
+router.delete("/:id", requireRole(...CAN_EDIT), (req, res) => {
   const db = req.app.locals.db;
   const { id } = req.params;
   const result = db.prepare("DELETE FROM documents WHERE id = ?").run(id);

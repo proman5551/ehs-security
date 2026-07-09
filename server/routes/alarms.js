@@ -1,9 +1,12 @@
 const express = require("express");
 const { EventEmitter } = require("events");
+const { requireAuth } = require("../lib/auth");
 
 const router = express.Router();
 const bus = new EventEmitter();
 bus.setMaxListeners(0);
+
+router.use(requireAuth);
 
 function rowToAlarm(row) {
   return {

@@ -1,6 +1,10 @@
 const express = require("express");
+const { requireAuth, requireRole } = require("../lib/auth");
 
 const router = express.Router();
+const CAN_ISSUE = ["시스템 어드민", "슈퍼 EHS", "EHS", "Security"];
+
+router.use(requireAuth);
 
 function rowToSignLink(row) {
   return {
@@ -17,7 +21,7 @@ router.get("/", (req, res) => {
   res.json(rows.map(rowToSignLink));
 });
 
-router.post("/", (req, res) => {
+router.post("/", requireRole(...CAN_ISSUE), (req, res) => {
   const db = req.app.locals.db;
   const { permitId, worker, contact, time } = req.body || {};
   if (!permitId || !worker || !contact) {

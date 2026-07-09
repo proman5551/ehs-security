@@ -1,6 +1,10 @@
 const express = require("express");
+const { requireAuth, requireRole } = require("../lib/auth");
 
 const router = express.Router();
+
+const CAN_ISSUE = ["시스템 어드민", "슈퍼 EHS", "EHS", "Security"];
+const CAN_APPROVE = ["시스템 어드민", "슈퍼 EHS", "EHS"];
 
 function rowToPermit(row) {
   return {
@@ -17,6 +21,7 @@ function rowToPermit(row) {
     workers: JSON.parse(row.workers_json || "[]"),
     approvals: row.approvals_json ? JSON.parse(row.approvals_json) : undefined,
     detail: row.detail_json ? JSON.parse(row.detail_json) : undefined,
+    createdByUserId: row.created_by_user_id ?? undefined,
   };
 }
 
@@ -30,13 +35,15 @@ function nextPermitId(db) {
   return `WP-2607-${String(max + 1).padStart(3, "0")}`;
 }
 
-router.get("/", (req, res) => {
+router.get("/", requireAuth, (req, res) => {
   const db = req.app.locals.db;
-  const rows = db.prepare("SELECT * FROM permits ORDER BY rowid DESC").all();
+  const rows = req.query.mine
+    ? db.prepare("SELECT * FROM permits WHERE created_by_user_id = ? ORDER BY rowid DESC").all(req.user.id)
+    : db.prepare("SELECT * FROM permits ORDER BY rowid DESC").all();
   res.json(rows.map(rowToPermit));
 });
 
-router.post("/", (req, res) => {
+router.post("/", requireAuth, requireRole(...CAN_ISSUE), (req, res) => {
   const db = req.app.locals.db;
   const body = req.body || {};
   const { type, site, worker, contact, workers, approvals, start, end, detail } = body;
@@ -49,8 +56,8 @@ router.post("/", (req, res) => {
   const allSigned = workers.every((w) => w.signed);
 
   db.prepare(`
-    INSERT INTO permits (id, type, site, location, start, end, status, signed, worker, contact, workers_json, approvals_json, detail_json)
-    VALUES (@id, @type, @site, @location, @start, @end, @status, @signed, @worker, @contact, @workers_json, @approvals_json, @detail_json)
+    INSERT INTO permits (id, type, site, location, start, end, status, signed, worker, contact, workers_json, approvals_json, detail_json, created_by_user_id)
+    VALUES (@id, @type, @site, @location, @start, @end, @status, @signed, @worker, @contact, @workers_json, @approvals_json, @detail_json, @created_by_user_id)
   `).run({
     id,
     type,
@@ -65,10 +72,35 @@ router.post("/", (req, res) => {
     workers_json: JSON.stringify(workers),
     approvals_json: approvals ? JSON.stringify(approvals) : null,
     detail_json: detail ? JSON.stringify(detail) : null,
+    created_by_user_id: req.user.id,
   });
 
   const row = db.prepare("SELECT * FROM permits WHERE id = ?").get(id);
   res.status(201).json(rowToPermit(row));
+});
+
+router.post("/:id/approve", requireAuth, requireRole(...CAN_APPROVE), (req, res) => {
+  const db = req.app.locals.db;
+  const { id } = req.params;
+  const row = db.prepare("SELECT * FROM permits WHERE id = ?").get(id);
+  if (!row) return res.status(404).json({ error: "허가서를 찾을 수 없습니다." });
+  if (row.status !== "승인대기") {
+    return res.status(400).json({ error: "승인대기 상태의 허가서만 승인할 수 있습니다." });
+  }
+  db.prepare("UPDATE permits SET status = '진행중' WHERE id = ?").run(id);
+  res.json(rowToPermit(db.prepare("SELECT * FROM permits WHERE id = ?").get(id)));
+});
+
+router.post("/:id/reject", requireAuth, requireRole(...CAN_APPROVE), (req, res) => {
+  const db = req.app.locals.db;
+  const { id } = req.params;
+  const row = db.prepare("SELECT * FROM permits WHERE id = ?").get(id);
+  if (!row) return res.status(404).json({ error: "허가서를 찾을 수 없습니다." });
+  if (row.status !== "승인대기") {
+    return res.status(400).json({ error: "승인대기 상태의 허가서만 반려할 수 있습니다." });
+  }
+  db.prepare("UPDATE permits SET status = '반려' WHERE id = ?").run(id);
+  res.json(rowToPermit(db.prepare("SELECT * FROM permits WHERE id = ?").get(id)));
 });
 
 router.post("/:id/sign", (req, res) => {

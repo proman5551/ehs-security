@@ -1,13 +1,17 @@
 const express = require("express");
+const { requireAuth, requireRole } = require("../lib/auth");
 
 const router = express.Router();
+const CAN_EDIT = ["시스템 어드민", "슈퍼 EHS", "EHS", "Security"];
+
+router.use(requireAuth);
 
 router.get("/", (req, res) => {
   const db = req.app.locals.db;
   res.json(db.prepare("SELECT * FROM emergency_contacts ORDER BY sort_order, id").all());
 });
 
-router.post("/", (req, res) => {
+router.post("/", requireRole(...CAN_EDIT), (req, res) => {
   const db = req.app.locals.db;
   const { name, role, phone, category } = req.body || {};
   if (!name || !phone) {
@@ -20,7 +24,7 @@ router.post("/", (req, res) => {
   res.status(201).json(db.prepare("SELECT * FROM emergency_contacts WHERE id = ?").get(result.lastInsertRowid));
 });
 
-router.put("/:id", (req, res) => {
+router.put("/:id", requireRole(...CAN_EDIT), (req, res) => {
   const db = req.app.locals.db;
   const { id } = req.params;
   const row = db.prepare("SELECT * FROM emergency_contacts WHERE id = ?").get(id);
@@ -33,7 +37,7 @@ router.put("/:id", (req, res) => {
   res.json(db.prepare("SELECT * FROM emergency_contacts WHERE id = ?").get(id));
 });
 
-router.delete("/:id", (req, res) => {
+router.delete("/:id", requireRole(...CAN_EDIT), (req, res) => {
   const db = req.app.locals.db;
   const result = db.prepare("DELETE FROM emergency_contacts WHERE id = ?").run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: "연락처를 찾을 수 없습니다." });

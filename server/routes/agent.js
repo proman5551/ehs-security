@@ -1,7 +1,10 @@
 const express = require("express");
 const Anthropic = require("@anthropic-ai/sdk");
+const { requireAuth } = require("../lib/auth");
 
 const router = express.Router();
+
+router.use(requireAuth);
 
 const SYSTEM_PROMPT =
   "당신은 산업현장 안전관제 대시보드의 전담 AI 에이전트입니다. 아래 대시보드 실시간 데이터를 근거로 " +

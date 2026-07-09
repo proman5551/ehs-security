@@ -1,12 +1,13 @@
 const express = require("express");
 const { fetchWeather, feelsLike, heatStageKey } = require("../lib/weather");
+const { requireAuth } = require("../lib/auth");
 
 const router = express.Router();
 
 const HAZARD_KEYWORDS = ["화기작업", "밀폐공간", "정전", "굴착작업", "고소작업", "중장비", "방사선"];
 const isHazardType = (type) => HAZARD_KEYWORDS.some((k) => (type || "").includes(k));
 
-router.get("/", async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
   const db = req.app.locals.db;
   const today = new Date().toISOString().slice(0, 10);
 

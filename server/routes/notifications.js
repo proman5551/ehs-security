@@ -1,13 +1,17 @@
 const express = require("express");
+const { requireAuth, requireRole } = require("../lib/auth");
 
 const router = express.Router();
+const CAN_EDIT = ["시스템 어드민", "슈퍼 EHS", "EHS"];
+
+router.use(requireAuth);
 
 router.get("/settings", (req, res) => {
   const db = req.app.locals.db;
   res.json(db.prepare("SELECT * FROM notification_settings ORDER BY grade, id").all());
 });
 
-router.post("/settings", (req, res) => {
+router.post("/settings", requireRole(...CAN_EDIT), (req, res) => {
   const db = req.app.locals.db;
   const { grade, department, recipientName, recipientContact, channel } = req.body || {};
   if (!grade || !department || !recipientName || !recipientContact) {
@@ -26,7 +30,7 @@ router.post("/settings", (req, res) => {
   );
 });
 
-router.delete("/settings/:id", (req, res) => {
+router.delete("/settings/:id", requireRole(...CAN_EDIT), (req, res) => {
   const db = req.app.locals.db;
   const result = db.prepare("DELETE FROM notification_settings WHERE id = ?").run(req.params.id);
   if (result.changes === 0) return res.status(404).json({ error: "설정을 찾을 수 없습니다." });

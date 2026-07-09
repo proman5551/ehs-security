@@ -1,6 +1,10 @@
 const express = require("express");
+const { requireAuth, requireRole } = require("../lib/auth");
 
 const router = express.Router();
+const CAN_REGISTER = ["시스템 어드민", "슈퍼 EHS", "EHS", "Security"];
+
+router.use(requireAuth);
 
 function nextIncidentId(db) {
   const rows = db.prepare("SELECT id FROM incidents WHERE id LIKE 'INC-%'").all();
@@ -51,7 +55,7 @@ router.get("/export.csv", (req, res) => {
   res.send("﻿" + lines.join("\n")); // BOM — 엑셀 한글 깨짐 방지
 });
 
-router.post("/", (req, res) => {
+router.post("/", requireRole(...CAN_REGISTER), (req, res) => {
   const db = req.app.locals.db;
   const { category, grade, site, type, description, occurredAt, reporter } = req.body || {};
   if (!category || !grade) {

@@ -57,7 +57,7 @@ import {
   Clock, Link2, MessageSquareText, Radio, FilePlus2, ClipboardCheck,
   Sun, Moon, BookOpen, ClipboardList, GraduationCap, TriangleAlert,
   PhoneCall, Building2, Plus, Trash2, Download, Printer, KeyRound,
-  User, Pencil,
+  User, Pencil, LogOut, ShieldCheck, Check, Ban, UserCog,
 } from "lucide-react";
 
 /* ───────────────────── 디자인 토큰 (라이트/다크) ─────────────────────
@@ -499,8 +499,10 @@ function Overview({ permits, alarms, temp }) {
   );
 }
 
-function Permits({ permits, onSign }) {
+function Permits({ permits, onSign, user, onApprove, onReject }) {
   const isMobile = useIsMobile();
+  const canApprove = can(user, "approvePermit");
+  const canIssue = can(user, "issuePermit");
 
   if (isMobile) {
     return (
@@ -517,16 +519,30 @@ function Permits({ permits, onSign }) {
             <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600 }}>{p.type} · {workerLabel(p)}</div>
             <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{p.site}</div>
             <div style={{ fontSize: 12, color: T.muted, fontFamily: T.mono, marginTop: 4 }}>{p.start} ~ {p.end}</div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 12, flexWrap: "wrap", gap: 8 }}>
               {(() => { const { done, total } = signCount(p); return p.signed
                 ? <span style={{ color: T.green, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}><CircleCheck size={14} /> 서명 {done}/{total} 완료</span>
                 : <span style={{ color: T.amber, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}><Clock size={14} /> 서명 {done}/{total}</span>; })()}
-              {!p.signed && (
-                <button onClick={() => onSign(p)} style={{
-                  background: `${T.amber}18`, border: `1px solid ${T.amber}66`, color: T.amber,
-                  borderRadius: 6, padding: "8px 14px", fontSize: 13, cursor: "pointer",
-                }}>서명링크 전송</button>
-              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                {canApprove && p.status === "승인대기" && (
+                  <>
+                    <button onClick={() => onApprove(p.id)} style={{
+                      background: `${T.green}18`, border: `1px solid ${T.green}66`, color: T.green,
+                      borderRadius: 6, padding: "8px 12px", fontSize: 13, cursor: "pointer",
+                    }}><Check size={13} /></button>
+                    <button onClick={() => onReject(p.id)} style={{
+                      background: `${T.red}18`, border: `1px solid ${T.red}66`, color: T.red,
+                      borderRadius: 6, padding: "8px 12px", fontSize: 13, cursor: "pointer",
+                    }}><Ban size={13} /></button>
+                  </>
+                )}
+                {canIssue && !p.signed && (
+                  <button onClick={() => onSign(p)} style={{
+                    background: `${T.amber}18`, border: `1px solid ${T.amber}66`, color: T.amber,
+                    borderRadius: 6, padding: "8px 14px", fontSize: 13, cursor: "pointer",
+                  }}>서명링크 전송</button>
+                )}
+              </div>
             </div>
           </div>
         ))}
@@ -559,13 +575,27 @@ function Permits({ permits, onSign }) {
                     ? <span style={{ color: T.green, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}><CircleCheck size={14} /> {done}/{total} 완료</span>
                     : <span style={{ color: T.amber, display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}><Clock size={14} /> {done}/{total} 서명</span>; })()}
                 </td>
-                <td style={{ padding: "10px" }}>
-                  {!p.signed && (
-                    <button onClick={() => onSign(p)} style={{
-                      background: "none", border: `1px solid ${T.amber}66`, color: T.amber,
-                      borderRadius: 4, padding: "4px 10px", fontSize: 12, cursor: "pointer", whiteSpace: "nowrap",
-                    }}>서명링크 전송</button>
-                  )}
+                <td style={{ padding: "10px", whiteSpace: "nowrap" }}>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {canApprove && p.status === "승인대기" && (
+                      <>
+                        <button onClick={() => onApprove(p.id)} title="승인" style={{
+                          background: "none", border: `1px solid ${T.green}66`, color: T.green,
+                          borderRadius: 4, padding: "4px 8px", cursor: "pointer",
+                        }}><Check size={13} /></button>
+                        <button onClick={() => onReject(p.id)} title="반려" style={{
+                          background: "none", border: `1px solid ${T.red}66`, color: T.red,
+                          borderRadius: 4, padding: "4px 8px", cursor: "pointer",
+                        }}><Ban size={13} /></button>
+                      </>
+                    )}
+                    {canIssue && !p.signed && (
+                      <button onClick={() => onSign(p)} style={{
+                        background: "none", border: `1px solid ${T.amber}66`, color: T.amber,
+                        borderRadius: 4, padding: "4px 10px", fontSize: 12, cursor: "pointer",
+                      }}>서명링크 전송</button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1663,8 +1693,9 @@ function ZoneHub({ temp, live }) {
 /* ───────────────────── 규정·지침·절차서 ───────────────────── */
 const DOC_CATEGORIES = ["안전보건관리체계", "비상대응매뉴얼", "기타"];
 
-function Documents() {
+function Documents({ user }) {
   const isMobile = useIsMobile();
+  const canEdit = can(user, "editContent");
   const [docs, setDocs] = useState([]);
   const [filter, setFilter] = useState("전체");
   const [selected, setSelected] = useState(null);
@@ -1688,12 +1719,12 @@ function Documents() {
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "320px 1fr", gap: 14, alignItems: "start" }}>
-      <Panel title="문서함" right={
+      <Panel title="문서함" right={canEdit && (
         <button onClick={() => setAdding((v) => !v)} style={{
           background: "none", border: `1px solid ${T.amber}66`, color: T.amber, borderRadius: 4,
           padding: "4px 10px", fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4,
         }}><Plus size={13} /> 문서 등록</button>
-      }>
+      )}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
           {["전체", ...DOC_CATEGORIES].map((c) => (
             <button key={c} onClick={() => setFilter(c)} style={{
@@ -1726,7 +1757,7 @@ function Documents() {
           {list.length === 0 && <div style={{ color: T.muted, fontSize: 13 }}>등록된 문서가 없습니다.</div>}
         </div>
       </Panel>
-      <Panel title={selected ? selected.title : "문서 미리보기"} right={selected && (
+      <Panel title={selected ? selected.title : "문서 미리보기"} right={selected && canEdit && (
         <button onClick={() => remove(selected.id)} style={{ background: "none", border: "none", color: T.red, cursor: "pointer" }}><Trash2 size={15} /></button>
       )}>
         {selected
@@ -1768,8 +1799,9 @@ function RiskAssessments() {
 }
 
 /* ───────────────────── 작업자 교육 ───────────────────── */
-function Training() {
+function Training({ user }) {
   const isMobile = useIsMobile();
+  const canComplete = can(user, "issuePermit");
   const [trainings, setTrainings] = useState([]);
   const [active, setActive] = useState(null);
   const [checked, setChecked] = useState([]);
@@ -1824,10 +1856,12 @@ function Training() {
           <Panel key={t.id} title={t.title} right={<Badge color={T.cyan}>{t.category}</Badge>}>
             <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6, marginBottom: 10 }}>{t.content}</div>
             <div style={{ fontSize: 11, color: T.muted, marginBottom: 8 }}>확인 항목 {t.checklist.length}개 · 서류 기반(퀴즈 선택)</div>
-            <button onClick={() => start(t)} style={{
-              width: "100%", background: `${T.amber}18`, border: `1px solid ${T.amber}66`, color: T.amber,
-              borderRadius: 6, padding: "10px 0", fontSize: 13, cursor: "pointer",
-            }}>교육 이수 진행</button>
+            {canComplete && (
+              <button onClick={() => start(t)} style={{
+                width: "100%", background: `${T.amber}18`, border: `1px solid ${T.amber}66`, color: T.amber,
+                borderRadius: 6, padding: "10px 0", fontSize: 13, cursor: "pointer",
+              }}>교육 이수 진행</button>
+            )}
           </Panel>
         ))}
       </div>
@@ -1873,9 +1907,11 @@ const INCIDENT_GRADES = [
 ];
 const gradeColor = (g) => (g === "A" ? T.red : g === "B" ? T.amber : T.cyan);
 
-function Incidents() {
+function Incidents({ user }) {
   const isMobile = useIsMobile();
-  const [sub, setSub] = useState("register");
+  const canRegister = can(user, "registerIncident");
+  const canManageAlerts = can(user, "manageIncidentAlerts");
+  const [sub, setSub] = useState(canRegister ? "register" : "list");
   const [incidents, setIncidents] = useState([]);
   const [stats, setStats] = useState(null);
   const [filter, setFilter] = useState({ category: "", grade: "" });
@@ -1932,11 +1968,11 @@ function Incidents() {
     fetch(`/api/notifications/settings/${id}`, { method: "DELETE" }).then(() => setSettings((s) => s.filter((x) => x.id !== id)));
 
   const subTabs = [
-    { key: "register", label: "등록" },
+    canRegister && { key: "register", label: "등록" },
     { key: "list", label: "목록" },
     { key: "stats", label: "통계" },
-    { key: "notify", label: "등급별 알림설정" },
-  ];
+    canManageAlerts && { key: "notify", label: "등급별 알림설정" },
+  ].filter(Boolean);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -2127,8 +2163,9 @@ function Incidents() {
 }
 
 /* ───────────────────── 비상연락망 ───────────────────── */
-function EmergencyContacts() {
+function EmergencyContacts({ user }) {
   const isMobile = useIsMobile();
+  const canEdit = can(user, "editContacts");
   const [contacts, setContacts] = useState([]);
   const [form, setForm] = useState({ name: "", role: "", phone: "", category: "사내" });
   const load = () => fetch("/api/emergency-contacts").then((r) => r.json()).then(setContacts);
@@ -2152,17 +2189,19 @@ function EmergencyContacts() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <Panel title="연락처 추가">
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr 120px 90px", gap: 8 }}>
-          <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="명칭(예: 소방서)" style={inp} />
-          <input value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} placeholder="역할" style={inp} />
-          <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="연락처" style={inp} />
-          <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} style={inp}>
-            {["사내", "외부기관", "의료기관"].map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <button onClick={submit} style={{ background: T.amber, border: "none", borderRadius: 6, fontWeight: 700, cursor: "pointer" }}>추가</button>
-        </div>
-      </Panel>
+      {canEdit && (
+        <Panel title="연락처 추가">
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr 120px 90px", gap: 8 }}>
+            <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="명칭(예: 소방서)" style={inp} />
+            <input value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} placeholder="역할" style={inp} />
+            <input value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="연락처" style={inp} />
+            <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))} style={inp}>
+              {["사내", "외부기관", "의료기관"].map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <button onClick={submit} style={{ background: T.amber, border: "none", borderRadius: 6, fontWeight: 700, cursor: "pointer" }}>추가</button>
+          </div>
+        </Panel>
+      )}
       {Object.entries(grouped).map(([cat, list]) => (
         <Panel key={cat} title={cat}>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2174,7 +2213,9 @@ function EmergencyContacts() {
                   {c.role && <div style={{ fontSize: 11, color: T.muted }}>{c.role}</div>}
                 </div>
                 <a href={`tel:${c.phone}`} style={{ fontFamily: T.mono, color: T.amber, fontSize: 13, textDecoration: "none" }}>{c.phone}</a>
-                <button onClick={() => remove(c.id)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Trash2 size={14} /></button>
+                {canEdit && (
+                  <button onClick={() => remove(c.id)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer" }}><Trash2 size={14} /></button>
+                )}
               </div>
             ))}
           </div>
@@ -2186,74 +2227,66 @@ function EmergencyContacts() {
 }
 
 /* ───────────────────── 마이페이지 ─────────────────────
-   별도 로그인 시스템이 아직 없어, 브라우저 localStorage에 저장된 프로필(이름·연락처)로
-   본인 확인을 대신하고, 기존 API에서 해당 이름/연락처로 필터링해 개인화된 뷰를 만든다. */
-const PROFILE_KEY = "safeops-profile";
-function loadProfile() {
-  try {
-    const raw = localStorage.getItem(PROFILE_KEY);
-    return raw ? JSON.parse(raw) : { name: "", department: "", role: "", contact: "" };
-  } catch (e) {
-    return { name: "", department: "", role: "", contact: "" };
-  }
-}
-
-function MyPage({ theme, onToggleTheme }) {
-  const isMobile = useIsMobile();
-  const [profile, setProfile] = useState(loadProfile);
-  const [editing, setEditing] = useState(() => !loadProfile().name);
-  const [draft, setDraft] = useState(profile);
-  const [completions, setCompletions] = useState(null);
+   실제 서버 계정(user prop, /api/auth/me)을 기반으로 한다. 본인이 등록(발급)한
+   작업허가서 중 아직 서명을 완료하지 못한 작업자를 바로 확인할 수 있게 한다. */
+function MyPage({ user, theme, onToggleTheme }) {
+  const [draft, setDraft] = useState({ name: user.name, department: user.department || "", contact: user.contact || "" });
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const [myPermits, setMyPermits] = useState([]);
-  const [myLinks, setMyLinks] = useState([]);
 
-  const hasIdentity = !!(profile.name.trim() && profile.contact.trim());
   const inp = { background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, color: T.text, padding: "10px 12px", fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box" };
 
-  useEffect(() => {
-    if (!hasIdentity) return;
-    fetch(`/api/trainings/completions?name=${encodeURIComponent(profile.name)}&contact=${encodeURIComponent(profile.contact)}`)
-      .then((r) => r.json()).then(setCompletions).catch(() => setCompletions([]));
-    fetch("/api/permits").then((r) => r.json()).then((all) => {
-      setMyPermits(all.filter((p) =>
-        p.worker === profile.name ||
-        permitWorkers(p).some((w) => w.name === profile.name && w.contact === profile.contact)
-      ));
-    }).catch(() => {});
-    fetch("/api/sign-links").then((r) => r.json()).then((all) => {
-      setMyLinks(all.filter((l) => l.contact === profile.contact));
-    }).catch(() => {});
-  }, [hasIdentity, profile.name, profile.contact]);
+  const loadMyPermits = () => fetch("/api/permits?mine=1").then((r) => r.json()).then(setMyPermits).catch(() => {});
+  useEffect(() => { loadMyPermits(); }, []);
+
+  // 내가 등록한 허가서 중 아직 서명을 완료하지 못한 작업자 목록
+  const unsigned = useMemo(() => {
+    const rows = [];
+    for (const p of myPermits) {
+      for (const w of permitWorkers(p)) {
+        if (!w.signed) rows.push({ permitId: p.id, permitType: p.type, site: p.site, name: w.name, contact: w.contact });
+      }
+    }
+    return rows;
+  }, [myPermits]);
 
   const save = () => {
-    if (!draft.name.trim() || !draft.contact.trim()) return;
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(draft));
-    setProfile(draft);
-    setEditing(false);
+    if (!draft.name.trim()) return;
+    setSaving(true);
+    setError("");
+    fetch("/api/auth/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(draft),
+    })
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || "저장에 실패했습니다.");
+        setEditing(false);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setSaving(false));
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 760 }}>
       <Panel title="내 프로필" right={!editing && (
-        <button onClick={() => { setDraft(profile); setEditing(true); }} style={{
+        <button onClick={() => { setDraft({ name: user.name, department: user.department || "", contact: user.contact || "" }); setEditing(true); }} style={{
           background: "none", border: `1px solid ${T.line}`, color: T.muted, borderRadius: 4,
           padding: "4px 10px", fontSize: 12, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4,
         }}><Pencil size={12} /> 수정</button>
       )}>
         {editing ? (
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <Field label="성명" required><input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} style={inp} /></Field>
-            <Field label="연락처" required><input value={draft.contact} onChange={(e) => setDraft((d) => ({ ...d, contact: e.target.value }))} placeholder="010-0000-0000" style={inp} /></Field>
-            <Field label="소속(부서/업체)"><input value={draft.department} onChange={(e) => setDraft((d) => ({ ...d, department: e.target.value }))} style={inp} /></Field>
-            <Field label="직책/역할"><input value={draft.role} onChange={(e) => setDraft((d) => ({ ...d, role: e.target.value }))} style={inp} /></Field>
+            <Field label="연락처"><input value={draft.contact} onChange={(e) => setDraft((d) => ({ ...d, contact: e.target.value }))} placeholder="010-0000-0000" style={inp} /></Field>
+            <Field label="부서" span><input value={draft.department} onChange={(e) => setDraft((d) => ({ ...d, department: e.target.value }))} style={inp} /></Field>
+            {error && <div style={{ gridColumn: "1 / -1", fontSize: 12, color: T.red }}>{error}</div>}
             <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8 }}>
-              <button onClick={save} style={{ flex: 1, background: T.amber, border: "none", borderRadius: 6, padding: "11px 0", fontWeight: 700, cursor: "pointer" }}>저장</button>
-              {profile.name && (
-                <button onClick={() => setEditing(false)} style={{ background: "none", border: `1px solid ${T.line}`, color: T.muted, borderRadius: 6, padding: "11px 16px", cursor: "pointer" }}>취소</button>
-              )}
-            </div>
-            <div style={{ gridColumn: "1 / -1", fontSize: 11, color: T.muted, lineHeight: 1.5 }}>
-              이 정보는 로그인 없이 이 브라우저에만 저장되며, 작업허가서·교육 이수 조회 시 본인 확인 용도로 사용됩니다. (별도 계정 시스템은 아직 없습니다)
+              <button onClick={save} disabled={saving} style={{ flex: 1, background: T.amber, border: "none", borderRadius: 6, padding: "11px 0", fontWeight: 700, cursor: saving ? "default" : "pointer", opacity: saving ? 0.6 : 1 }}>저장</button>
+              <button onClick={() => setEditing(false)} style={{ background: "none", border: `1px solid ${T.line}`, color: T.muted, borderRadius: 6, padding: "11px 16px", cursor: "pointer" }}>취소</button>
             </div>
           </div>
         ) : (
@@ -2263,16 +2296,18 @@ function MyPage({ theme, onToggleTheme }) {
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
             }}><User size={22} color={T.amber} /></div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{profile.name}</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: T.text, display: "flex", alignItems: "center", gap: 8 }}>
+                {user.name} <Badge color={T.cyan}>{user.role}</Badge>
+              </div>
               <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
-                {[profile.department, profile.role].filter(Boolean).join(" · ") || "소속 미입력"} · {profile.contact}
+                {[user.department, user.username].filter(Boolean).join(" · ")} {user.contact ? `· ${user.contact}` : ""}
               </div>
             </div>
           </div>
         )}
       </Panel>
 
-      {hasIdentity && !editing && (
+      {!editing && (
         <>
           <Panel title="화면 설정">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
@@ -2287,23 +2322,27 @@ function MyPage({ theme, onToggleTheme }) {
             </div>
           </Panel>
 
-          <Panel title="내 안전교육 이수 현황" right={<Badge color={T.cyan}>{completions ? completions.length : "-"}건</Badge>}>
-            {completions === null ? (
-              <div style={{ color: T.muted, fontSize: 13 }}>불러오는 중…</div>
-            ) : completions.length === 0 ? (
-              <div style={{ color: T.red, fontSize: 13 }}>이수한 교육이 없습니다. <b style={{ color: T.amber }}>작업자 교육</b> 탭에서 이수해 주세요.</div>
+          <Panel title="내가 올린 작업자 중 서명 미완료" right={<Badge color={unsigned.length ? T.amber : T.green}>{unsigned.length}명</Badge>}>
+            {unsigned.length === 0 ? (
+              <div style={{ color: T.muted, fontSize: 13 }}>내가 등록한 허가서의 작업자가 모두 서명을 완료했습니다.</div>
             ) : (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {completions.map((c, i) => (
-                  <Badge key={i} color={T.green}>{c.trainingId} · {(c.completedAt || "").slice(0, 10)}</Badge>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {unsigned.map((w, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, padding: "10px 12px", flexWrap: "wrap" }}>
+                    <Clock size={14} color={T.amber} />
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{w.name}</span>
+                    <span style={{ fontSize: 12, color: T.muted }}>{w.contact}</span>
+                    <span style={{ fontFamily: T.mono, fontSize: 12, color: T.cyan }}>{w.permitId}</span>
+                    <span style={{ fontSize: 12, color: T.muted }}>{w.permitType} · {w.site}</span>
+                  </div>
                 ))}
               </div>
             )}
           </Panel>
 
-          <Panel title="내가 등재된 작업허가서" right={<Badge color={T.cyan}>{myPermits.length}건</Badge>}>
+          <Panel title="내가 등록한 작업허가서" right={<Badge color={T.cyan}>{myPermits.length}건</Badge>}>
             {myPermits.length === 0 ? (
-              <div style={{ color: T.muted, fontSize: 13 }}>등재된 작업허가서가 없습니다.</div>
+              <div style={{ color: T.muted, fontSize: 13 }}>등록한 작업허가서가 없습니다.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {myPermits.map((p) => (
@@ -2318,24 +2357,205 @@ function MyPage({ theme, onToggleTheme }) {
               </div>
             )}
           </Panel>
-
-          <Panel title="나에게 발송된 서명링크" right={<Badge color={T.cyan}>{myLinks.length}건</Badge>}>
-            {myLinks.length === 0 ? (
-              <div style={{ color: T.muted, fontSize: 13 }}>발송된 서명링크가 없습니다.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {myLinks.map((l, i) => (
-                  <div key={i} style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 13, padding: "8px 2px", borderBottom: `1px solid ${T.line}` }}>
-                    <CircleCheck size={14} color={T.green} />
-                    <span style={{ fontFamily: T.mono, color: T.cyan }}>{l.permitId}</span>
-                    <span style={{ marginLeft: "auto", fontFamily: T.mono, fontSize: 11, color: T.muted }}>{l.time}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Panel>
         </>
       )}
+    </div>
+  );
+}
+
+/* ───────────────────── 계정 관리 (시스템 어드민 전용) ───────────────────── */
+function AccountsAdmin({ currentUser }) {
+  const isMobile = useIsMobile();
+  const [users, setUsers] = useState([]);
+  const [form, setForm] = useState({ username: "", password: "", name: "", department: "", contact: "", role: ROLES[ROLES.length - 1] });
+  const [editingId, setEditingId] = useState(null);
+  const [error, setError] = useState("");
+
+  const load = () => fetch("/api/users").then((r) => r.json()).then(setUsers).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const inp = { background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, color: T.text, padding: "10px 12px", fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box" };
+
+  const resetForm = () => { setForm({ username: "", password: "", name: "", department: "", contact: "", role: ROLES[ROLES.length - 1] }); setEditingId(null); setError(""); };
+
+  const submit = () => {
+    setError("");
+    const isEdit = editingId != null;
+    const body = { name: form.name, department: form.department, contact: form.contact, role: form.role };
+    if (!isEdit) { body.username = form.username; body.password = form.password; }
+    else if (form.password) { body.password = form.password; }
+    if (!isEdit && (!form.username.trim() || !form.password || !form.name.trim())) {
+      setError("아이디, 비밀번호, 성명은 필수입니다."); return;
+    }
+    fetch(isEdit ? `/api/users/${editingId}` : "/api/users", {
+      method: isEdit ? "PUT" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || "저장에 실패했습니다.");
+        resetForm();
+        load();
+      })
+      .catch((err) => setError(err.message));
+  };
+
+  const startEdit = (u) => {
+    setEditingId(u.id);
+    setForm({ username: u.username, password: "", name: u.name, department: u.department || "", contact: u.contact || "", role: u.role });
+    setError("");
+  };
+
+  const remove = (u) => {
+    if (u.id === currentUser.id) return;
+    fetch(`/api/users/${u.id}`, { method: "DELETE" }).then(() => load());
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <Panel title={editingId != null ? "계정 수정" : "계정 등록"}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+          <Field label="아이디" required={editingId == null}>
+            <input value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} style={inp} disabled={editingId != null} />
+          </Field>
+          <Field label={editingId != null ? "비밀번호 (변경 시에만 입력)" : "비밀번호"} required={editingId == null}>
+            <input type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} style={inp} placeholder={editingId != null ? "변경하지 않으려면 비워두세요" : "8자 이상"} />
+          </Field>
+          <Field label="성명" required><input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} style={inp} /></Field>
+          <Field label="부서"><input value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} style={inp} /></Field>
+          <Field label="연락처"><input value={form.contact} onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))} style={inp} /></Field>
+          <Field label="계정 유형" required>
+            <select value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} style={inp}>
+              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </Field>
+        </div>
+        {error && <div style={{ fontSize: 12, color: T.red, marginTop: 10 }}>{error}</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <button onClick={submit} style={{ flex: 1, background: T.amber, border: "none", borderRadius: 6, padding: "11px 0", fontWeight: 700, cursor: "pointer" }}>
+            {editingId != null ? "저장" : "계정 등록"}
+          </button>
+          {editingId != null && (
+            <button onClick={resetForm} style={{ background: "none", border: `1px solid ${T.line}`, color: T.muted, borderRadius: 6, padding: "11px 16px", cursor: "pointer" }}>취소</button>
+          )}
+        </div>
+      </Panel>
+
+      <Panel title="계정 목록" right={<Badge color={T.cyan}>{users.length}명</Badge>}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 640 }}>
+            <thead>
+              <tr style={{ color: T.muted, fontFamily: T.mono, fontSize: 11, textAlign: "left" }}>
+                {["아이디", "성명", "부서", "계정 유형", ""].map((h) => (
+                  <th key={h} style={{ padding: "8px 10px", borderBottom: `1px solid ${T.line}`, fontWeight: 500 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} style={{ borderBottom: `1px solid ${T.line}` }}>
+                  <td style={{ padding: "10px", fontFamily: T.mono }}>{u.username}</td>
+                  <td style={{ padding: "10px" }}>{u.name} {u.id === currentUser.id && <span style={{ color: T.muted, fontSize: 11 }}>(나)</span>}</td>
+                  <td style={{ padding: "10px", color: T.muted }}>{u.department || "-"}</td>
+                  <td style={{ padding: "10px" }}><Badge color={T.cyan}>{u.role}</Badge></td>
+                  <td style={{ padding: "10px", whiteSpace: "nowrap" }}>
+                    <button onClick={() => startEdit(u)} style={{ background: "none", border: "none", color: T.muted, cursor: "pointer", padding: 4 }}><Pencil size={14} /></button>
+                    {u.id !== currentUser.id && (
+                      <button onClick={() => remove(u)} style={{ background: "none", border: "none", color: T.red, cursor: "pointer", padding: 4 }}><Trash2 size={14} /></button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+/* ───────────────────── 권한 매트릭스 ─────────────────────
+   서버(server/lib/auth.js, 각 routes/*.js)가 실제 접근제어를 강제한다.
+   프론트의 can()은 UX상 불필요한 버튼을 숨기기 위한 보조 수단일 뿐,
+   보안 경계가 아니다. */
+const ROLES = ["시스템 어드민", "슈퍼 EHS", "EHS", "Security", "기타 임직원"];
+const PERMISSIONS = {
+  manageAccounts: ["시스템 어드민"],
+  editContent: ["시스템 어드민", "슈퍼 EHS", "EHS"], // 위험성평가·교육자료·규정지침 등록/수정
+  approvePermit: ["시스템 어드민", "슈퍼 EHS", "EHS"],
+  issuePermit: ["시스템 어드민", "슈퍼 EHS", "EHS", "Security"], // 작성/서명링크 발송
+  registerIncident: ["시스템 어드민", "슈퍼 EHS", "EHS", "Security"],
+  manageIncidentAlerts: ["시스템 어드민", "슈퍼 EHS", "EHS"],
+  editContacts: ["시스템 어드민", "슈퍼 EHS", "EHS", "Security"],
+};
+function can(user, action) {
+  return !!user && (PERMISSIONS[action] || []).includes(user.role);
+}
+
+/* ───────────────────── 로그인 화면 ───────────────────── */
+function LoginScreen({ onLogin }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const inp = {
+    background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, color: T.text,
+    padding: "12px 14px", fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box",
+  };
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!username.trim() || !password) return;
+    setLoading(true);
+    setError("");
+    fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: username.trim(), password }),
+    })
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || "로그인에 실패했습니다.");
+        onLogin(data.user);
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+      background: T.bg, color: T.text, fontFamily: "'Pretendard', 'Noto Sans KR', -apple-system, 'Segoe UI', sans-serif",
+      padding: 16,
+    }}>
+      <form onSubmit={submit} style={{
+        width: "100%", maxWidth: 360, background: T.panel, border: `1px solid ${T.line}`,
+        borderRadius: 12, padding: "32px 28px", display: "flex", flexDirection: "column", gap: 16,
+      }}>
+        <div style={{ textAlign: "center", marginBottom: 4 }}>
+          <div style={{
+            width: 52, height: 52, borderRadius: "50%", background: `${T.amber}18`, border: `1px solid ${T.amber}55`,
+            display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px",
+          }}><ShieldCheck size={24} color={T.amber} /></div>
+          <div style={{ fontFamily: T.mono, fontSize: 18, fontWeight: 700, letterSpacing: "0.04em" }}>
+            SAFE<span style={{ color: T.amber }}>OPS</span>
+          </div>
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>인스파이어 리조트 안전관제 · 임직원 로그인</div>
+        </div>
+        <Field label="아이디" required>
+          <input value={username} onChange={(e) => setUsername(e.target.value)} style={inp} autoFocus autoComplete="username" />
+        </Field>
+        <Field label="비밀번호" required>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} style={inp} autoComplete="current-password" />
+        </Field>
+        {error && <div style={{ fontSize: 12, color: T.red }}>{error}</div>}
+        <button type="submit" disabled={loading} style={{
+          background: T.amber, border: "none", borderRadius: 6, padding: "12px 0", fontWeight: 700,
+          cursor: loading ? "default" : "pointer", opacity: loading ? 0.6 : 1,
+        }}>{loading ? "로그인 중…" : "로그인"}</button>
+      </form>
     </div>
   );
 }
@@ -2345,23 +2565,25 @@ const NAV = [
   { key: "overview", label: "종합현황", icon: LayoutDashboard },
   { key: "zone", label: "작업구역", icon: Building2 },
   { key: "permits", label: "허가서", icon: FileCheck2 },
-  { key: "form", label: "작성", icon: FilePlus2 },
-  { key: "sign", label: "서명링크", icon: PenLine },
+  { key: "form", label: "작성", icon: FilePlus2, require: "issuePermit" },
+  { key: "sign", label: "서명링크", icon: PenLine, require: "issuePermit" },
   { key: "riskassess", label: "위험성평가", icon: ClipboardList },
   { key: "training", label: "교육", icon: GraduationCap },
   { key: "docs", label: "규정지침", icon: BookOpen },
   { key: "incidents", label: "사고내역", icon: TriangleAlert },
   { key: "contacts", label: "비상연락망", icon: PhoneCall },
   { key: "alarms", label: "알람", icon: BellRing },
+  { key: "accounts", label: "계정관리", icon: UserCog, require: "manageAccounts" },
 ];
 const NAV_FULL_LABEL = {
   overview: "종합현황", zone: "작업구역", permits: "작업허가서", form: "허가서 작성", sign: "서명링크",
   riskassess: "위험성평가", training: "작업자 교육", docs: "규정·지침·절차서", incidents: "사고 내역/통계",
-  contacts: "비상연락망", alarms: "알람이력", mypage: "마이페이지",
+  contacts: "비상연락망", alarms: "알람이력", mypage: "마이페이지", accounts: "계정 관리",
 };
 
-function SafetyDashboard() {
+function SafetyDashboard({ user, onLogout }) {
   const isMobile = useIsMobile();
+  const visibleNav = NAV.filter((n) => !n.require || can(user, n.require));
   const [tab, setTab] = useState("overview");
   const [agentOpen, setAgentOpen] = useState(false);
   const [permits, setPermits] = useState([]);
@@ -2404,6 +2626,19 @@ function SafetyDashboard() {
     fetch(`/api/alarms/${id}/ack`, { method: "POST" })
       .then((r) => r.json())
       .then((updated) => setAlarms((prev) => prev.map((a) => (a.id === updated.id ? updated : a))))
+      .catch(() => {});
+  };
+
+  const approvePermit = (id) => {
+    fetch(`/api/permits/${id}/approve`, { method: "POST" })
+      .then((r) => r.json())
+      .then((updated) => setPermits((prev) => prev.map((p) => (p.id === updated.id ? updated : p))))
+      .catch(() => {});
+  };
+  const rejectPermit = (id) => {
+    fetch(`/api/permits/${id}/reject`, { method: "POST" })
+      .then((r) => r.json())
+      .then((updated) => setPermits((prev) => prev.map((p) => (p.id === updated.id ? updated : p))))
       .catch(() => {});
   };
 
@@ -2452,16 +2687,17 @@ function SafetyDashboard() {
     <>
       {tab === "overview" && <Overview permits={permits} alarms={alarms} temp={temp} />}
       {tab === "zone" && <ZoneHub temp={temp} live={tempLive} />}
-      {tab === "permits" && <Permits permits={permits} onSign={goSign} />}
-      {tab === "form" && <PermitForm onSubmit={addPermit} />}
-      {tab === "sign" && <SignLink permits={permits} sentLinks={sentLinks} onSend={sendLink} preselect={preselect} />}
+      {tab === "permits" && <Permits permits={permits} onSign={goSign} user={user} onApprove={approvePermit} onReject={rejectPermit} />}
+      {tab === "form" && can(user, "issuePermit") && <PermitForm onSubmit={addPermit} />}
+      {tab === "sign" && can(user, "issuePermit") && <SignLink permits={permits} sentLinks={sentLinks} onSend={sendLink} preselect={preselect} />}
       {tab === "riskassess" && <RiskAssessments />}
-      {tab === "training" && <Training />}
-      {tab === "docs" && <Documents />}
-      {tab === "incidents" && <Incidents />}
-      {tab === "contacts" && <EmergencyContacts />}
+      {tab === "training" && <Training user={user} />}
+      {tab === "docs" && <Documents user={user} />}
+      {tab === "incidents" && <Incidents user={user} />}
+      {tab === "contacts" && <EmergencyContacts user={user} />}
       {tab === "alarms" && <AlarmHistory alarms={alarms} onAck={ackAlarm} />}
-      {tab === "mypage" && <MyPage theme={theme} onToggleTheme={toggleTheme} />}
+      {tab === "mypage" && <MyPage user={user} theme={theme} onToggleTheme={toggleTheme} />}
+      {tab === "accounts" && can(user, "manageAccounts") && <AccountsAdmin currentUser={user} />}
     </>
   );
 
@@ -2498,6 +2734,10 @@ function SafetyDashboard() {
               }}>
                 <Bot size={14} /> 에이전트
               </button>
+              <button onClick={onLogout} title="로그아웃" style={{
+                background: "none", border: `1px solid ${T.line}`, color: T.muted, borderRadius: 6, width: 34, height: 34,
+                display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
+              }}><LogOut size={15} /></button>
             </div>
           </div>
           <div style={{ height: 4, background: `repeating-linear-gradient(-45deg, ${T.amber} 0 8px, #14181F 8px 16px)` }} />
@@ -2514,7 +2754,7 @@ function SafetyDashboard() {
           borderTop: `1px solid ${T.line}`, WebkitOverflowScrolling: "touch",
           paddingBottom: "env(safe-area-inset-bottom)",
         }}>
-          {NAV.map(({ key, label, icon: Icon }) => (
+          {visibleNav.map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => setTab(key)} style={{
               flex: "1 0 auto", minWidth: 66, padding: "10px 6px 8px",
               background: "none", border: "none",
@@ -2562,8 +2802,8 @@ function SafetyDashboard() {
           <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>현장 안전관제 시스템</div>
         </div>
         <div style={{ height: 5, background: `repeating-linear-gradient(-45deg, ${T.amber} 0 8px, #14181F 8px 16px)` }} />
-        <nav style={{ padding: 10, display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
-          {NAV.map(({ key, icon: Icon }) => (
+        <nav style={{ padding: 10, display: "flex", flexDirection: "column", gap: 2, flex: 1, overflowY: "auto" }}>
+          {visibleNav.map(({ key, icon: Icon }) => (
             <button key={key} onClick={() => setTab(key)} style={{
               display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
               background: tab === key ? `${T.amber}18` : "none",
@@ -2577,12 +2817,22 @@ function SafetyDashboard() {
           ))}
         </nav>
         <button onClick={() => setAgentOpen((v) => !v)} style={{
-          margin: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+          margin: "12px 12px 8px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
           padding: "10px 0", background: agentOpen ? `${T.amber}18` : "none",
           border: `1px solid ${T.amber}55`, borderRadius: 6, color: T.amber, fontSize: 13, cursor: "pointer",
         }}>
           <Bot size={15} /> {agentOpen ? "에이전트 닫기" : "에이전트 열기"}
         </button>
+        <div style={{ margin: "0 12px 12px", padding: "10px 12px", borderTop: `1px solid ${T.line}`, paddingTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</div>
+            <div style={{ fontSize: 10, color: T.muted, marginTop: 1 }}>{user.role}</div>
+          </div>
+          <button onClick={onLogout} title="로그아웃" style={{
+            background: "none", border: `1px solid ${T.line}`, color: T.muted, borderRadius: 6, width: 30, height: 30,
+            display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
+          }}><LogOut size={14} /></button>
+        </div>
       </div>
 
       {/* 메인 */}
@@ -2626,8 +2876,33 @@ function SafetyDashboard() {
   );
 }
 
+/* ───────────────────── 인증 게이트 ───────────────────── */
+function AuthLoading() {
+  return (
+    <div style={{
+      minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+      background: T.bg, color: T.muted, fontFamily: "'Pretendard', 'Noto Sans KR', -apple-system, 'Segoe UI', sans-serif",
+    }}>불러오는 중…</div>
+  );
+}
+
+function App() {
+  const [user, setUser] = useState(undefined); // undefined: 확인 중, null: 미로그인
+
+  const refreshUser = () => fetch("/api/auth/me").then((r) => r.json()).then((d) => setUser(d.user || null)).catch(() => setUser(null));
+  useEffect(() => { refreshUser(); }, []);
+
+  const logout = () => {
+    fetch("/api/auth/logout", { method: "POST" }).finally(() => setUser(null));
+  };
+
+  if (user === undefined) return <AuthLoading />;
+  if (!user) return <LoginScreen onLogin={setUser} />;
+  return <SafetyDashboard user={user} onLogout={logout} />;
+}
+
 const _root = createRoot(document.getElementById("root"));
-_root.render(<SafetyDashboard />);
+_root.render(<App />);
 const _l = document.getElementById("loading");
 if (_l) _l.remove();
 </script>

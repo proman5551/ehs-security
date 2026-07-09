@@ -2,8 +2,11 @@ require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") }
 
 const path = require("path");
 const express = require("express");
+const cookieParser = require("cookie-parser");
 
 const { initDb } = require("./db");
+const authRouter = require("./routes/auth");
+const usersRouter = require("./routes/users");
 const agentRouter = require("./routes/agent");
 const permitsRouter = require("./routes/permits");
 const alarmsRouter = require("./routes/alarms");
@@ -21,9 +24,12 @@ const db = initDb();
 
 const app = express();
 app.use(express.json());
+app.use(cookieParser());
 
 app.locals.db = db;
 
+app.use("/api/auth", authRouter);
+app.use("/api/users", usersRouter);
 app.use("/api/agent", agentRouter);
 app.use("/api/permits", permitsRouter);
 app.use("/api/alarms", alarmsRouter);
