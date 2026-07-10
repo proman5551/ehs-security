@@ -447,20 +447,82 @@ function AgentPanel({ open, onClose, permits, alarms, sentLinks }) {
 }
 
 /* ───────────────────── 각 화면 ───────────────────── */
+const siteStatusColor = (s) => (s === "경고" ? T.red : s === "주의" ? T.amber : T.green);
+
 function Overview({ permits, alarms, temp }) {
   const isMobile = useIsMobile();
+  const signal = useRiskSignal();
+  // T는 렌더 시점 값을 in-place로 담고 있으므로, 매 렌더마다 새로 계산해야 테마 전환이 반영된다.
+  const workTypeColors = [T.cyan, T.amber, T.red, T.green, "#8B7CF6", "#FF7A3C"];
   const pending = permits.filter((p) => p.status === "승인대기").length;
   const active = permits.filter((p) => p.status === "진행중").length;
   const unack = alarms.filter((a) => !a.ack).length;
   const lastTemp = temp[temp.length - 1];
+
+  const workTypeCounts = useMemo(() => {
+    const m = {};
+    permits.forEach((p) => { m[p.type] = (m[p.type] || 0) + 1; });
+    return Object.entries(m).map(([type, cnt]) => ({ type, cnt }));
+  }, [permits]);
+
+  const siteActiveCounts = useMemo(() => {
+    const m = {};
+    permits.forEach((p) => { if (p.status === "진행중") m[p.site] = (m[p.site] || 0) + 1; });
+    return m;
+  }, [permits]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <RiskSignalBanner signal={signal} />
+
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
         <Kpi label="진행중 허가" value={active} sub={`승인대기 ${pending}건`} color={T.cyan} />
         <Kpi label="미확인 알람" value={unack} sub="즉시 확인 필요" color={unack > 0 ? T.red : T.green} />
         <Kpi label="체감온도(옥외)" value={`${lastTemp.체감}°C`} sub={heatStage(lastTemp.체감).label} color={heatStage(lastTemp.체감).color} />
         <Kpi label="가동 현장" value={SITES.length} sub={`작업자 ${SITES.reduce((s, x) => s + x.workers, 0)}명`} />
       </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
+        <Panel title="작업 유형별 현황" right={<Badge color={T.cyan}>{permits.length}건</Badge>}>
+          {workTypeCounts.length === 0 ? (
+            <div style={{ color: T.muted, fontSize: 13 }}>등록된 작업허가서가 없습니다.</div>
+          ) : (
+            <div style={{ height: 190 }}>
+              <ResponsiveContainer>
+                <BarChart data={workTypeCounts}>
+                  <CartesianGrid stroke={T.line} vertical={false} />
+                  <XAxis dataKey="type" stroke={T.muted} fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke={T.muted} fontSize={12} tickLine={false} axisLine={false} width={24} allowDecimals={false} />
+                  <Tooltip contentStyle={{ background: T.panel2, border: `1px solid ${T.line}`, borderRadius: 6, fontSize: 12 }} />
+                  <Bar dataKey="cnt" name="건수" radius={[3, 3, 0, 0]}>
+                    {workTypeCounts.map((d, i) => (
+                      <Cell key={i} fill={workTypeColors[i % workTypeColors.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </Panel>
+        <Panel title="작업 위치 현황">
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {SITES.map((s) => (
+              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, background: T.bg, border: `1px solid ${T.line}`, borderRadius: 6, padding: "9px 12px", flexWrap: "wrap" }}>
+                <MapPin size={14} color={siteStatusColor(s.status)} style={{ flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{s.name}</div>
+                  <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>{s.manager} · 작업자 {s.workers}명</div>
+                </div>
+                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                  {siteActiveCounts[s.name] > 0 && <Badge color={T.cyan}>진행중 허가 {siteActiveCounts[s.name]}건</Badge>}
+                  <Badge color={siteStatusColor(s.status)}>{s.status}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
         <Panel title="최근 7일 알람 발생">
           <div style={{ height: 190 }}>
