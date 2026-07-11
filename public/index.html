@@ -3,27 +3,27 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
-<meta name="theme-color" content="#0A0E13" />
+<meta name="theme-color" content="#0A0912" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>SAFEOPS · 인스파이어 리조트 안전관제</title>
 <style>
   * { box-sizing: border-box; }
-  html, body, #root { height: 100%; margin: 0; padding: 0; background: #0A0E13; }
+  html, body, #root { height: 100%; margin: 0; padding: 0; background: #0A0912; }
   body { -webkit-font-smoothing: antialiased; overscroll-behavior: none; }
   #loading {
     position: fixed; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 14px;
-    background: #0A0E13; color: #7D8896;
+    background: #0A0912; color: #948CA6;
     font-family: -apple-system, 'Segoe UI', 'Noto Sans KR', sans-serif;
   }
   #loading .logo { font-size: 20px; font-weight: 700; letter-spacing: .04em; font-family: ui-monospace, monospace; }
-  #loading .logo b { color: #FFB224; }
-  #loading .bar { width: 160px; height: 3px; border-radius: 2px; background: #1E2836; overflow: hidden; }
-  #loading .bar i { display: block; width: 40%; height: 100%; background: #FFB224; animation: slide 1s ease-in-out infinite; }
+  #loading .logo b { color: #D4AF6A; }
+  #loading .bar { width: 160px; height: 3px; border-radius: 2px; background: #2A2438; overflow: hidden; }
+  #loading .bar i { display: block; width: 40%; height: 100%; background: #D4AF6A; animation: slide 1s ease-in-out infinite; }
   @keyframes slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(300%)} }
   @keyframes safeops-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-  @keyframes safeops-pulse-border { 0%,100%{box-shadow:0 0 0 0 rgba(242,85,90,.5)} 50%{box-shadow:0 0 0 6px rgba(242,85,90,0)} }
+  @keyframes safeops-pulse-border { 0%,100%{box-shadow:0 0 0 0 rgba(226,85,90,.5)} 50%{box-shadow:0 0 0 6px rgba(226,85,90,0)} }
   @media print {
     .safeops-noprint { display: none !important; }
   }
@@ -64,17 +64,19 @@ import {
    T는 모듈 스코프 상수 객체지만, applyTheme()이 속성을 in-place로 mutate한다.
    컴포넌트들은 렌더링 시점에 T.xxx를 직접 읽으므로(React.memo 미사용),
    테마 전환 시 최상위에서 applyTheme() 후 상태 변경 → 전체 서브트리 리렌더만
-   시켜주면 모든 컴포넌트가 새 색상으로 다시 그려진다. */
+   시켜주면 모든 컴포넌트가 새 색상으로 다시 그려진다.
+   팔레트: 리조트 톤(다크 네이비·블랙 배경 + 골드/딥퍼플 강조) — amber는 골드 강조색,
+   cyan은 세컨더리(퍼플) 강조색으로 값만 교체해 사용한다(키 이름은 하위 호환 위해 유지). */
 const THEMES = {
   dark: {
-    bg: "#0A0E13", panel: "#111721", panel2: "#0E141D", line: "#1E2836",
-    text: "#E6EDF5", muted: "#7D8896",
-    amber: "#FFB224", red: "#F2555A", green: "#46C68F", cyan: "#53C7E8",
+    bg: "#0A0912", panel: "#15141F", panel2: "#0F0D18", line: "#2A2438",
+    text: "#F2EFE9", muted: "#948CA6",
+    amber: "#D4AF6A", red: "#E2555A", green: "#4CC79A", cyan: "#8B6FC9",
   },
   light: {
-    bg: "#F4F6F8", panel: "#FFFFFF", panel2: "#EEF1F4", line: "#D8DEE5",
-    text: "#101826", muted: "#5B6472",
-    amber: "#B7791F", red: "#D6393F", green: "#1F9D68", cyan: "#0E86A8",
+    bg: "#F7F3EC", panel: "#FFFFFF", panel2: "#EFE8DA", line: "#E0D6C3",
+    text: "#241F33", muted: "#6B6478",
+    amber: "#A8823A", red: "#C23E46", green: "#1F8F68", cyan: "#6A4FA0",
   },
 };
 const T = {
@@ -453,7 +455,7 @@ function Overview({ permits, alarms, temp }) {
   const isMobile = useIsMobile();
   const signal = useRiskSignal();
   // T는 렌더 시점 값을 in-place로 담고 있으므로, 매 렌더마다 새로 계산해야 테마 전환이 반영된다.
-  const workTypeColors = [T.cyan, T.amber, T.red, T.green, "#8B7CF6", "#FF7A3C"];
+  const workTypeColors = [T.cyan, T.amber, T.red, T.green, "#C9A64A", "#5A4A7A"];
   const pending = permits.filter((p) => p.status === "승인대기").length;
   const active = permits.filter((p) => p.status === "진행중").length;
   const unack = alarms.filter((a) => !a.ack).length;
@@ -1090,7 +1092,7 @@ function SignaturePad({ title, onSave, onClose }) {
     c.height = rect.height * dpr;
     const ctx = c.getContext("2d");
     ctx.scale(dpr, dpr);
-    ctx.strokeStyle = "#E6EDF5";
+    ctx.strokeStyle = "#F2EFE9";
     ctx.lineWidth = 2.5;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -2802,7 +2804,7 @@ function SafetyDashboard({ user, onLogout }) {
               }}><LogOut size={15} /></button>
             </div>
           </div>
-          <div style={{ height: 4, background: `repeating-linear-gradient(-45deg, ${T.amber} 0 8px, #14181F 8px 16px)` }} />
+          <div style={{ height: 4, background: `repeating-linear-gradient(-45deg, ${T.amber} 0 8px, #0F0D18 8px 16px)` }} />
         </div>
 
         {/* 콘텐츠 */}
@@ -2863,7 +2865,7 @@ function SafetyDashboard({ user, onLogout }) {
           </div>
           <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>현장 안전관제 시스템</div>
         </div>
-        <div style={{ height: 5, background: `repeating-linear-gradient(-45deg, ${T.amber} 0 8px, #14181F 8px 16px)` }} />
+        <div style={{ height: 5, background: `repeating-linear-gradient(-45deg, ${T.amber} 0 8px, #0F0D18 8px 16px)` }} />
         <nav style={{ padding: 10, display: "flex", flexDirection: "column", gap: 2, flex: 1, overflowY: "auto" }}>
           {visibleNav.map(({ key, icon: Icon }) => (
             <button key={key} onClick={() => setTab(key)} style={{
