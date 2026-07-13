@@ -42,19 +42,24 @@ router.put("/:id", (req, res) => {
   const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id);
   if (!row) return res.status(404).json({ error: "계정을 찾을 수 없습니다." });
 
-  const { name, department, contact, role, password } = req.body || {};
+  const { username, name, department, contact, role, password } = req.body || {};
   if (role && !ROLES.includes(role)) {
     return res.status(400).json({ error: `role은 ${ROLES.join(", ")} 중 하나여야 합니다.` });
   }
   if (password && password.length < 8) {
     return res.status(400).json({ error: "비밀번호는 8자 이상이어야 합니다." });
   }
+  if (username && username !== row.username) {
+    const exists = db.prepare("SELECT id FROM users WHERE username = ? AND id != ?").get(username, id);
+    if (exists) return res.status(409).json({ error: "이미 존재하는 아이디입니다." });
+  }
 
   db.prepare(`
-    UPDATE users SET name = ?, department = ?, contact = ?, role = ?,
+    UPDATE users SET username = ?, name = ?, department = ?, contact = ?, role = ?,
       password_hash = ?
     WHERE id = ?
   `).run(
+    username ?? row.username,
     name ?? row.name,
     department ?? row.department,
     contact ?? row.contact,

@@ -2449,10 +2449,10 @@ function AccountsAdmin({ currentUser }) {
   const submit = () => {
     setError("");
     const isEdit = editingId != null;
-    const body = { name: form.name, department: form.department, contact: form.contact, role: form.role };
-    if (!isEdit) { body.username = form.username; body.password = form.password; }
+    const body = { username: form.username, name: form.name, department: form.department, contact: form.contact, role: form.role };
+    if (!isEdit) { body.password = form.password; }
     else if (form.password) { body.password = form.password; }
-    if (!isEdit && (!form.username.trim() || !form.password || !form.name.trim())) {
+    if (!form.username.trim() || !form.name.trim() || (!isEdit && !form.password)) {
       setError("아이디, 비밀번호, 성명은 필수입니다."); return;
     }
     fetch(isEdit ? `/api/users/${editingId}` : "/api/users", {
@@ -2484,8 +2484,8 @@ function AccountsAdmin({ currentUser }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <Panel title={editingId != null ? "계정 수정" : "계정 등록"}>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
-          <Field label="아이디" required={editingId == null}>
-            <input value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} style={inp} disabled={editingId != null} />
+          <Field label="아이디" required>
+            <input value={form.username} onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))} style={inp} />
           </Field>
           <Field label={editingId != null ? "비밀번호 (변경 시에만 입력)" : "비밀번호"} required={editingId == null}>
             <input type="password" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} style={inp} placeholder={editingId != null ? "변경하지 않으려면 비워두세요" : "8자 이상"} />
