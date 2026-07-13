@@ -2608,10 +2608,15 @@ function LoginBackground() {
   );
 }
 
+// 프론트엔드 개발 단계 임시 기본 계정 — server/db.js 시드 기본값과 동일.
+// 백엔드 연동(실서비스) 단계에서 반드시 제거할 것.
+const DEV_DEFAULT_USERNAME = "503161";
+const DEV_DEFAULT_PASSWORD = "503161";
+
 function LoginScreen({ onLogin }) {
   const isMobile = useIsMobile();
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState(DEV_DEFAULT_USERNAME);
+  const [password, setPassword] = useState(DEV_DEFAULT_PASSWORD);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 

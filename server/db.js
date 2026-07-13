@@ -1,5 +1,4 @@
 const path = require("path");
-const crypto = require("crypto");
 const Database = require("better-sqlite3");
 const bcrypt = require("bcryptjs");
 
@@ -349,25 +348,25 @@ function initDb() {
 
   const userCount = db.prepare("SELECT COUNT(*) AS n FROM users").get().n;
   if (userCount === 0) {
-    const username = process.env.ADMIN_INITIAL_USERNAME || "admin";
-    const password = process.env.ADMIN_INITIAL_PASSWORD || crypto.randomBytes(9).toString("base64url");
+    // 프론트엔드 개발 단계용 임시 기본 계정 — .env 설정 없이 바로 로그인 가능하도록 고정값 사용.
+    // 백엔드 연동(실서비스) 단계에서는 .env에 ADMIN_INITIAL_USERNAME·ADMIN_INITIAL_PASSWORD를
+    // 지정해 이 기본값을 반드시 교체할 것.
+    const username = process.env.ADMIN_INITIAL_USERNAME || "503161";
+    const password = process.env.ADMIN_INITIAL_PASSWORD || "503161";
     const hash = bcrypt.hashSync(password, 10);
     db.prepare(`
       INSERT INTO users (username, password_hash, name, department, contact, role)
       VALUES (?, ?, '시스템 관리자', 'IT', '', '시스템 어드민')
     `).run(username, hash);
 
-    if (!process.env.ADMIN_INITIAL_PASSWORD) {
-      console.log("");
-      console.log("========================================================");
-      console.log(" 최초 시스템 어드민 계정이 생성되었습니다.");
-      console.log(`   아이디: ${username}`);
-      console.log(`   비밀번호: ${password}`);
-      console.log(" 이 비밀번호는 다시 표시되지 않습니다 — 로그인 후 반드시 변경하세요.");
-      console.log(" (.env의 ADMIN_INITIAL_USERNAME·ADMIN_INITIAL_PASSWORD로 직접 지정할 수도 있습니다)");
-      console.log("========================================================");
-      console.log("");
-    }
+    console.log("");
+    console.log("========================================================");
+    console.log(" 최초 시스템 어드민 계정이 생성되었습니다. (임시 개발용 기본값)");
+    console.log(`   아이디: ${username}`);
+    console.log(`   비밀번호: ${password}`);
+    console.log(" 실서비스 전환 시 .env의 ADMIN_INITIAL_USERNAME·ADMIN_INITIAL_PASSWORD로 반드시 교체하세요.");
+    console.log("========================================================");
+    console.log("");
   }
 
   return db;
