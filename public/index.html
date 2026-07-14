@@ -17,7 +17,8 @@
     background: #0A0912; color: #948CA6;
     font-family: -apple-system, 'Segoe UI', 'Noto Sans KR', sans-serif;
   }
-  #loading .logo { font-size: 20px; font-weight: 700; letter-spacing: .04em; font-family: ui-monospace, monospace; }
+  #loading .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; letter-spacing: .02em; font-family: ui-monospace, monospace; }
+  #loading .logo img { width: 32px; height: 32px; object-fit: contain; }
   #loading .logo b { color: #D4AF6A; }
   #loading .bar { width: 160px; height: 3px; border-radius: 2px; background: #2A2438; overflow: hidden; }
   #loading .bar i { display: block; width: 40%; height: 100%; background: #D4AF6A; animation: slide 1s ease-in-out infinite; }
@@ -47,7 +48,7 @@
 </head>
 <body>
 <div id="root"></div>
-<div id="loading"><div class="logo">SAFE<b>OPS</b></div><div class="bar"><i></i></div><div>로딩 중…</div></div>
+<div id="loading"><div class="logo"><img src="assets/logo-icon.png" alt="" />INSPIRE <b>BEACON</b></div><div class="bar"><i></i></div><div>로딩 중…</div></div>
 <script type="text/babel" data-type="module" data-presets="react">
 import { createRoot } from "react-dom/client";
 import React, { useState, useEffect, useRef, useMemo } from "react";
@@ -2997,10 +2998,11 @@ function LoginScreen({ onLogin }) {
         {/* 안전 슬로건 */}
         <div style={{ maxWidth: 440, textAlign: isMobile ? "center" : "left" }}>
           <div style={{
-            display: "inline-flex", alignItems: "center", gap: 6, fontFamily: T.mono, fontSize: 13,
+            display: "inline-flex", alignItems: "center", gap: 8, fontFamily: T.mono, fontSize: 13,
             color: "#D4AF6A", letterSpacing: "0.08em", marginBottom: 18,
           }}>
-            <ShieldCheck size={15} /> SAFE<b style={{ color: "#D4AF6A" }}>OPS</b>
+            <img src="assets/logo-icon.png" alt="" style={{ width: 20, height: 20, objectFit: "contain" }} />
+            INSPIRE SAFETY BEACON
           </div>
           <div style={{ fontSize: isMobile ? 30 : 40, fontWeight: 800, lineHeight: 1.3, letterSpacing: "-0.01em" }}>
             안전한 리조트를<br />만들어갑니다
@@ -3018,13 +3020,7 @@ function LoginScreen({ onLogin }) {
           boxShadow: "0 24px 60px rgba(0,0,0,0.45)",
         }}>
           <div style={{ textAlign: "center", marginBottom: 4 }}>
-            <div style={{
-              width: 52, height: 52, borderRadius: "50%", background: `${T.amber}18`, border: `1px solid ${T.amber}55`,
-              display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px",
-            }}><ShieldCheck size={24} color={T.amber} /></div>
-            <div style={{ fontFamily: T.mono, fontSize: 18, fontWeight: 700, letterSpacing: "0.04em" }}>
-              SAFE<span style={{ color: T.amber }}>OPS</span>
-            </div>
+            <img src="assets/logo-full.png" alt="INSPIRE SAFETY BEACON" style={{ width: "100%", maxWidth: 260, objectFit: "contain", margin: "0 auto 10px", display: "block" }} />
             <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>인스파이어 리조트 안전관제 · 임직원 로그인</div>
           </div>
           <Field label="아이디" required>
@@ -3206,11 +3202,9 @@ function SafetyDashboard({ user, onLogout }) {
         {/* 상단 헤더 */}
         <div style={{ background: T.panel2, borderBottom: `1px solid ${T.line}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px" }}>
-            <div>
-              <span style={{ fontFamily: T.mono, fontSize: 15, fontWeight: 700 }}>
-                SAFE<span style={{ color: T.amber }}>OPS</span>
-              </span>
-              <span style={{ fontSize: 12, color: T.muted, marginLeft: 10 }}>{NAV_FULL_LABEL[tab]}</span>
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <img src="assets/logo-icon.png" alt="" style={{ width: 24, height: 24, objectFit: "contain", marginRight: 8 }} />
+              <span style={{ fontSize: 12, color: T.muted }}>{NAV_FULL_LABEL[tab]}</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: T.green, boxShadow: `0 0 6px ${T.green}` }} />
@@ -3288,11 +3282,14 @@ function SafetyDashboard({ user, onLogout }) {
         width: 200, flexShrink: 0, borderRight: `1px solid ${T.line}`, background: T.panel2,
         display: "flex", flexDirection: "column",
       }}>
-        <div style={{ padding: "18px 16px 14px" }}>
-          <div style={{ fontFamily: T.mono, fontSize: 15, fontWeight: 700, letterSpacing: "0.04em" }}>
-            SAFE<span style={{ color: T.amber }}>OPS</span>
+        <div style={{ padding: "18px 16px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+          <img src="assets/logo-icon.png" alt="" style={{ width: 34, height: 34, objectFit: "contain", flexShrink: 0 }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, letterSpacing: "0.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              INSPIRE <span style={{ color: T.amber }}>BEACON</span>
+            </div>
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>현장 안전관제 시스템</div>
           </div>
-          <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>현장 안전관제 시스템</div>
         </div>
         <div style={{ height: 5, background: `repeating-linear-gradient(-45deg, ${T.amber} 0 8px, #0F0D18 8px 16px)` }} />
         <nav style={{ padding: 10, display: "flex", flexDirection: "column", gap: 2, flex: 1, overflowY: "auto" }}>
