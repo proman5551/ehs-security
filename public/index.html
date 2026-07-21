@@ -2001,26 +2001,39 @@ function RiskSignalBanner({ signal }) {
   );
 }
 
-// 실제 시설 도면 이미지가 public/assets/floorplan.png 에 준비되면 자동으로 도면+마커 모드로 전환된다.
-// 이미지가 없으면 SITES 카드 그리드에 위험 표시(깜빡임)로 대체된다.
-function FloorPlan({ zones }) {
+/* ───────────────────── 층별 도면 ─────────────────────
+   실제 층별 도면 이미지를 받으면 아래 두 가지만 교체하면 된다:
+   1) public/assets/floorplan-<key>.png 경로에 해당 층 도면 이미지 배치
+   2) 이 FLOORS 배열의 zones를 그 층의 실제 구역명·좌표(x/y, 이미지 위 % 기준)로 교체
+   도면 이미지가 없는 층은 자동으로 카드 그리드(위험 표시 깜빡임)로 대체된다.
+   ⚠ 아래 zones는 실제 층별 구역이 아직 없어 SITES를 층마다 임시로 재사용한 자리표시자(placeholder)다. */
+const FLOORS = [
+  { key: "B1", label: "B1", image: "assets/floorplan-b1.png", zones: SITES },
+  { key: "1F", label: "1F", image: "assets/floorplan-1f.png", zones: SITES },
+  { key: "2F", label: "2F", image: "assets/floorplan-2f.png", zones: SITES },
+  { key: "3F", label: "3F", image: "assets/floorplan-3f.png", zones: SITES },
+];
+
+function FloorPlan({ floor, hazardZones }) {
   const [imgOk, setImgOk] = useState(true);
+  useEffect(() => { setImgOk(true); }, [floor.key]); // 층 전환 시 새 이미지 로드를 다시 시도
   const hazardBySite = useMemo(() => {
     const m = {};
-    (zones || []).forEach((z) => { m[z.site] = z.hazardCount; });
+    (hazardZones || []).forEach((z) => { m[z.site] = z.hazardCount; });
     return m;
-  }, [zones]);
+  }, [hazardZones]);
 
   if (imgOk) {
     return (
       <div style={{ position: "relative", width: "100%", borderRadius: 8, overflow: "hidden", background: T.panel2, border: `1px solid ${T.line}` }}>
         <img
-          src="assets/floorplan.png"
-          alt="시설 도면"
+          key={floor.key}
+          src={floor.image}
+          alt={`${floor.label} 도면`}
           onError={() => setImgOk(false)}
           style={{ width: "100%", display: "block" }}
         />
-        {SITES.filter((s) => s.x != null && s.y != null).map((s) => {
+        {floor.zones.filter((s) => s.x != null && s.y != null).map((s) => {
           const active = (hazardBySite[s.name] || 0) > 0;
           const color = active ? T.red : T.green;
           return (
@@ -2038,7 +2051,7 @@ function FloorPlan({ zones }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
-        {SITES.map((s) => {
+        {floor.zones.map((s) => {
           const active = (hazardBySite[s.name] || 0) > 0;
           return (
             <div key={s.id} style={{
@@ -2054,7 +2067,7 @@ function FloorPlan({ zones }) {
         })}
       </div>
       <div style={{ fontSize: 11, color: T.muted }}>
-        ※ 실제 시설 도면 이미지를 public/assets/floorplan.png 경로에 배치하면 도면 기반 좌표 표시로 자동 전환됩니다.
+        ※ {floor.label} 실제 도면 이미지를 <code>public/{floor.image}</code> 경로에 배치하면 도면 기반 좌표 표시로 자동 전환됩니다.
       </div>
     </div>
   );
@@ -2063,6 +2076,8 @@ function FloorPlan({ zones }) {
 function ZoneHub({ temp, live }) {
   const isMobile = useIsMobile();
   const [sub, setSub] = useState("map");
+  const [floorKey, setFloorKey] = useState(FLOORS[0].key);
+  const floor = FLOORS.find((f) => f.key === floorKey) || FLOORS[0];
   const signal = useRiskSignal();
   const subTabs = [
     { key: "map", label: "위험신호등 · 도면" },
@@ -2084,8 +2099,19 @@ function ZoneHub({ temp, live }) {
       {sub === "map" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <RiskSignalBanner signal={signal} />
-          <Panel title="위험구역 표시">
-            <FloorPlan zones={signal?.zones} />
+          <Panel title="위험구역 표시" right={
+            <div style={{ display: "flex", gap: 4 }}>
+              {FLOORS.map((f) => (
+                <button key={f.key} onClick={() => setFloorKey(f.key)} style={{
+                  background: floorKey === f.key ? `${T.amber}22` : "none",
+                  border: `1px solid ${floorKey === f.key ? T.amber : T.line}`,
+                  color: floorKey === f.key ? T.amber : T.muted,
+                  borderRadius: 4, padding: "4px 10px", fontSize: 12, cursor: "pointer",
+                }}>{f.label}</button>
+              ))}
+            </div>
+          }>
+            <FloorPlan floor={floor} hazardZones={signal?.zones} />
           </Panel>
         </div>
       )}
